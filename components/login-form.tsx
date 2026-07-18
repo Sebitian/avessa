@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { getClientPostAuthPath } from "@/lib/profile-client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -38,8 +39,8 @@ export function LoginForm({
         password,
       });
       if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
+      const nextPath = await getClientPostAuthPath();
+      router.push(nextPath);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
