@@ -12,7 +12,7 @@ export default function ProtectedPage() {
   );
 }
 
-async function ProtectedRedirect() {
+async function ProtectedRedirect(): Promise<never> {
   const user = await getSessionUser();
   if (!user) {
     redirect("/auth/login");
