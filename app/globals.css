@@ -89,229 +89,171 @@
   }
 }
 
-/* Discover map — cute place bubbles */
-.avessa-place-marker {
-  background: transparent !important;
-  border: none !important;
-}
-
-.avessa-place-bubble {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  width: max-content;
-  max-width: 12.5rem;
-  pointer-events: auto;
-  filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.14));
-}
-
-.avessa-place-bubble__icon {
-  display: flex;
-  height: 2.75rem;
-  width: 2.75rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.94);
-  font-size: 1.25rem;
-  line-height: 1;
-  box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.06),
-    0 8px 18px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(8px);
-}
-
-.avessa-place-bubble__label {
-  min-width: 0;
-  padding: 0.35rem 0.55rem;
-  border-radius: 0.85rem;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.08),
-    0 6px 14px rgba(15, 23, 42, 0.1);
-}
-
-.avessa-place-bubble__name {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1.2;
-  color: #18181b;
-}
-
-.avessa-place-bubble__dot {
-  display: inline-block;
-  height: 0.4rem;
-  width: 0.4rem;
-  flex-shrink: 0;
-  border-radius: 9999px;
-}
-
-.avessa-place-bubble__tag {
-  margin-top: 0.15rem;
-  font-size: 0.72rem;
-  font-weight: 500;
-  line-height: 1.25;
-  color: #3f3f46;
-}
-
-.leaflet-container {
-  font: inherit;
-  background: #e8eef3;
-}
-
-/* Discover map — people bubbles */
+/* Explore map — Figma-style place chips (small type, soft pin) */
+.avessa-place-marker,
+.avessa-event-marker,
 .avessa-person-marker {
   background: transparent !important;
   border: none !important;
 }
 
-.avessa-person-bubble {
+.avessa-place-chip {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   width: max-content;
-  max-width: 11.5rem;
+  max-width: 10.5rem;
   pointer-events: auto;
-  filter: drop-shadow(0 8px 16px rgba(91, 33, 182, 0.22));
+  filter: drop-shadow(0 3px 8px rgba(15, 23, 42, 0.1));
 }
 
-.avessa-person-bubble__avatar {
-  position: relative;
+.avessa-place-chip__pin {
   display: flex;
-  height: 3.25rem;
-  width: 3.25rem;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-radius: 9999px;
-  background: #7c3aed;
-  color: #fff;
-  font-size: 1.1rem;
-  font-weight: 700;
-  box-shadow:
-    0 0 0 3px #fff,
-    0 0 0 5px rgba(124, 58, 237, 0.35);
-}
-
-.avessa-person-bubble__avatar img {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
-  background: #ede9fe;
-}
-
-.avessa-person-bubble__fallback {
-  position: relative;
-  z-index: 0;
-}
-
-.avessa-person-bubble__label {
-  min-width: 0;
-  padding: 0.4rem 0.65rem;
-  border-radius: 0.9rem;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.08),
-    0 6px 14px rgba(15, 23, 42, 0.1);
-}
-
-.avessa-person-bubble__name {
-  font-size: 0.84rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: #18181b;
-}
-
-.avessa-person-bubble__meta {
-  margin-top: 0.12rem;
-  font-size: 0.7rem;
-  font-weight: 500;
-  line-height: 1.2;
-  color: #52525b;
-}
-
-/* Explore map — event bubbles */
-.avessa-event-marker {
-  background: transparent !important;
-  border: none !important;
-}
-
-.avessa-event-bubble {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  width: max-content;
-  max-width: 13rem;
-  pointer-events: auto;
-  filter: drop-shadow(0 6px 14px rgba(190, 24, 93, 0.2));
-}
-
-.avessa-event-bubble__icon {
-  display: flex;
-  height: 2.75rem;
-  width: 2.75rem;
+  height: 2.2rem;
+  width: 2.2rem;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
   background: #fff;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
+  line-height: 1;
   box-shadow:
-    0 0 0 2px #fce7f3,
-    0 8px 18px rgba(15, 23, 42, 0.12);
+    0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 4px 12px rgba(15, 23, 42, 0.1);
 }
 
-.avessa-event-bubble__label {
+.avessa-place-chip__pin--event {
+  box-shadow:
+    0 0 0 1.5px #f9a8d4,
+    0 4px 12px rgba(190, 24, 93, 0.12);
+}
+
+.avessa-place-chip__copy {
   min-width: 0;
-  padding: 0.35rem 0.55rem;
-  border-radius: 0.85rem;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.08),
-    0 6px 14px rgba(15, 23, 42, 0.1);
+  padding: 0.1rem 0;
 }
 
-.avessa-event-bubble__name {
-  font-size: 0.78rem;
+.avessa-place-chip__name {
+  display: flex;
+  align-items: center;
+  gap: 0.22rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
   color: #18181b;
+  letter-spacing: -0.01em;
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
-.avessa-event-bubble__tag {
-  margin-top: 0.12rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  color: #be185d;
+.avessa-place-chip__dot {
+  display: inline-block;
+  height: 0.28rem;
+  width: 0.28rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
 }
 
-/* Explore map — sector badges */
-.avessa-sector-marker {
-  background: transparent !important;
-  border: none !important;
+.avessa-place-chip__tag {
+  margin-top: 0.05rem;
+  font-size: 0.58rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #52525b;
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(255, 255, 255, 0.9);
 }
 
-.avessa-sector-badge {
-  display: inline-flex;
+.avessa-person-chip {
+  display: flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.3rem 0.65rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.96);
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #18181b;
-  white-space: nowrap;
-  box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.1),
-    0 6px 14px rgba(15, 23, 42, 0.12);
+  width: max-content;
+  max-width: 8.5rem;
   pointer-events: auto;
+  filter: drop-shadow(0 3px 8px rgba(91, 33, 182, 0.14));
+}
+
+.avessa-person-chip__avatar {
+  position: relative;
+  display: flex;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  border-radius: 9999px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px rgba(124, 58, 237, 0.35);
+}
+
+.avessa-person-chip__online {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  z-index: 2;
+  height: 0.45rem;
+  width: 0.45rem;
+  border-radius: 9999px;
+  background: #34d399;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+
+.avessa-person-chip__avatar img {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  border-radius: 9999px;
+  object-fit: cover;
+  background: #ede9fe;
+}
+
+.avessa-person-chip__fallback {
+  position: relative;
+  z-index: 0;
+}
+
+.avessa-person-chip__copy {
+  min-width: 0;
+}
+
+.avessa-person-chip__name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #18181b;
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(255, 255, 255, 0.9);
+}
+
+.avessa-person-chip__meta {
+  margin-top: 0.04rem;
+  font-size: 0.55rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #52525b;
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(255, 255, 255, 0.9);
+}
+
+.avessa-person-chip__meta.is-online {
+  color: #047857;
+  font-weight: 600;
+}
+
+.leaflet-container {
+  font: inherit;
+  background: #e8eef3;
 }

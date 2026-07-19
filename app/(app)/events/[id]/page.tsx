@@ -18,7 +18,10 @@ export default async function EventDetailPage({
     notFound();
   }
 
-  const backHref = from === "explore" ? "/explore" : "/events";
+  const backHref =
+    from === "explore"
+      ? "/explore?category=events"
+      : "/discover?category=events";
 
   return <EventProfile event={event} backHref={backHref} />;
 }

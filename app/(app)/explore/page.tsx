@@ -3,16 +3,25 @@ import { redirect } from "next/navigation";
 
 import { ExploreMap } from "@/components/explore-map";
 import { OnboardingFallback } from "@/components/onboarding-fallback";
+import type { DiscoverCategoryKey } from "@/lib/mock-data";
+import { DISCOVER_CATEGORIES } from "@/lib/mock-data";
 import {
   getCurrentProfile,
   getNearbyTravelers,
   getSessionUser,
 } from "@/lib/profile";
 
+function parseCategory(value?: string): DiscoverCategoryKey {
+  if (value && DISCOVER_CATEGORIES.some((c) => c.key === value)) {
+    return value as DiscoverCategoryKey;
+  }
+  return "top";
+}
+
 export default function ExplorePage({
   searchParams,
 }: {
-  searchParams: Promise<{ event?: string; layer?: string }>;
+  searchParams: Promise<{ event?: string; category?: string }>;
 }) {
   return (
     <Suspense fallback={<OnboardingFallback />}>
@@ -24,7 +33,7 @@ export default function ExplorePage({
 async function ExploreContent({
   searchParams,
 }: {
-  searchParams: Promise<{ event?: string; layer?: string }>;
+  searchParams: Promise<{ event?: string; category?: string }>;
 }) {
   const user = await getSessionUser();
   if (!user) {
@@ -36,9 +45,9 @@ async function ExploreContent({
     redirect("/onboarding/profile");
   }
 
-  const { event, layer } = await searchParams;
+  const { event, category } = await searchParams;
   const travelers = await getNearbyTravelers();
-  const initialLayer = layer === "events" || event ? "events" : "places";
+  const initialCategory = event ? "events" : parseCategory(category);
 
   return (
     <ExploreMap
@@ -48,7 +57,7 @@ async function ExploreContent({
       userLng={profile.approx_lng}
       travelers={travelers}
       focusEventId={event ?? null}
-      initialLayer={initialLayer}
+      initialCategory={initialCategory}
     />
   );
 }

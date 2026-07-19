@@ -1,15 +1,16 @@
 "use client";
 
 import L from "leaflet";
-import { LocateFixed, X } from "lucide-react";
+import { Clock3, LocateFixed } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   DEFAULT_MAP_CENTER,
-  PLACE_CATEGORIES,
+  DISCOVER_CATEGORIES,
   placesAround,
+  type DiscoverCategoryKey,
   type Place,
   type PlaceCategoryKey,
 } from "@/lib/mock-data";
@@ -19,18 +20,10 @@ import {
   formatEventWhen,
   type CityEvent,
 } from "@/lib/events";
-import type { DiscoverTraveler } from "@/lib/profile";
-import {
-  placesInSector,
-  sectorFillColor,
-  sectorsAround,
-  type MapSector,
-} from "@/lib/sectors";
+import { presenceLabel, type DiscoverTraveler } from "@/lib/presence";
 import { cn } from "@/lib/utils";
 
 import "leaflet/dist/leaflet.css";
-
-type MapLayer = "places" | "events";
 
 type DiscoverMapProps = {
   userLat?: number | null;
@@ -39,7 +32,7 @@ type DiscoverMapProps = {
   travelers?: DiscoverTraveler[];
   title?: string;
   focusEventId?: string | null;
-  initialLayer?: MapLayer;
+  initialCategory?: DiscoverCategoryKey;
 };
 
 const ACCENT_DOT: Record<NonNullable<Place["accent"]>, string> = {
@@ -57,24 +50,26 @@ function escapeHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+/** Figma-style: emoji pin + tiny name / tagline (no big cards). */
 function placeIcon(place: Place) {
   const accent = place.accent ? ACCENT_DOT[place.accent] : "#a78bfa";
+  const tag = place.tagline || place.category || "";
   return L.divIcon({
     className: "avessa-place-marker",
     html: `
-      <div class="avessa-place-bubble">
-        <div class="avessa-place-bubble__icon">${place.emoji}</div>
-        <div class="avessa-place-bubble__label">
-          <div class="avessa-place-bubble__name">
-            <span class="avessa-place-bubble__dot" style="background:${accent}"></span>
+      <div class="avessa-place-chip">
+        <div class="avessa-place-chip__pin">${place.emoji}</div>
+        <div class="avessa-place-chip__copy">
+          <div class="avessa-place-chip__name">
+            <span class="avessa-place-chip__dot" style="background:${accent}"></span>
             ${escapeHtml(place.name)}
           </div>
-          <div class="avessa-place-bubble__tag">${escapeHtml(place.category || place.tagline)}</div>
+          <div class="avessa-place-chip__tag">${escapeHtml(tag)}</div>
         </div>
       </div>
     `,
-    iconSize: [200, 52],
-    iconAnchor: [22, 26],
+    iconSize: [168, 40],
+    iconAnchor: [18, 20],
   });
 }
 
@@ -82,72 +77,63 @@ function eventIcon(event: CityEvent) {
   return L.divIcon({
     className: "avessa-event-marker",
     html: `
-      <div class="avessa-event-bubble">
-        <div class="avessa-event-bubble__icon">${event.emoji}</div>
-        <div class="avessa-event-bubble__label">
-          <div class="avessa-event-bubble__name">${escapeHtml(event.title)}</div>
-          <div class="avessa-event-bubble__tag">${escapeHtml(event.label)}</div>
+      <div class="avessa-place-chip">
+        <div class="avessa-place-chip__pin avessa-place-chip__pin--event">${event.emoji}</div>
+        <div class="avessa-place-chip__copy">
+          <div class="avessa-place-chip__name">${escapeHtml(event.title)}</div>
+          <div class="avessa-place-chip__tag">${escapeHtml(event.label)}</div>
         </div>
       </div>
     `,
-    iconSize: [210, 52],
-    iconAnchor: [22, 26],
+    iconSize: [168, 40],
+    iconAnchor: [18, 20],
   });
 }
 
-function sectorLabelIcon(sector: MapSector) {
-  return L.divIcon({
-    className: "avessa-sector-marker",
-    html: `
-      <div class="avessa-sector-badge">
-        <span>${sector.emoji}</span>
-        <span>${escapeHtml(sector.label)}</span>
-      </div>
-    `,
-    iconSize: [120, 32],
-    iconAnchor: [60, 16],
-  });
-}
-
+/** Small avatar + tiny name — same scale as place chips. */
 function personIcon(traveler: DiscoverTraveler) {
   const initial = escapeHtml(traveler.firstName.charAt(0).toUpperCase());
-  const name = escapeHtml(traveler.firstName);
-  const meta = escapeHtml(
-    [traveler.age != null ? String(traveler.age) : null, traveler.area]
-      .filter(Boolean)
-      .join(" · "),
-  );
+  const meta = escapeHtml(presenceLabel(traveler));
   const avatar =
     traveler.avatarUrl ||
     `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(traveler.id)}`;
+  const onlineDot = traveler.online
+    ? `<span class="avessa-person-chip__online" aria-hidden="true"></span>`
+    : "";
 
   return L.divIcon({
     className: "avessa-person-marker",
     html: `
-      <div class="avessa-person-bubble">
-        <div class="avessa-person-bubble__avatar">
+      <div class="avessa-person-chip">
+        <div class="avessa-person-chip__avatar">
           <img src="${escapeHtml(avatar)}" alt="" />
-          <span class="avessa-person-bubble__fallback">${initial}</span>
+          <span class="avessa-person-chip__fallback">${initial}</span>
+          ${onlineDot}
         </div>
-        <div class="avessa-person-bubble__label">
-          <div class="avessa-person-bubble__name">${name}</div>
-          <div class="avessa-person-bubble__meta">${meta}</div>
+        <div class="avessa-person-chip__copy">
+          <div class="avessa-person-chip__name">${escapeHtml(traveler.firstName)}</div>
+          ${
+            meta
+              ? `<div class="avessa-person-chip__meta${traveler.online ? " is-online" : ""}">${meta}</div>`
+              : ""
+          }
         </div>
       </div>
     `,
-    iconSize: [180, 56],
-    iconAnchor: [28, 28],
+    iconSize: [140, 36],
+    iconAnchor: [16, 18],
   });
 }
 
-function polygonCentroid(polygon: [number, number][]): [number, number] {
-  let lat = 0;
-  let lng = 0;
-  for (const [a, b] of polygon) {
-    lat += a;
-    lng += b;
-  }
-  return [lat / polygon.length, lng / polygon.length];
+function distanceSq(
+  aLat: number,
+  aLng: number,
+  bLat: number,
+  bLng: number,
+) {
+  const dLat = aLat - bLat;
+  const dLng = aLng - bLng;
+  return dLat * dLat + dLng * dLng;
 }
 
 export function DiscoverMap({
@@ -155,9 +141,9 @@ export function DiscoverMap({
   userLng,
   areaLabel,
   travelers = [],
-  title = "Explore",
+  title: _title = "Explore",
   focusEventId = null,
-  initialLayer = "places",
+  initialCategory = "top",
 }: DiscoverMapProps) {
   const router = useRouter();
   const routerRef = useRef(router);
@@ -169,15 +155,18 @@ export function DiscoverMap({
   const centerKeyRef = useRef<string | null>(null);
   const focusedEventRef = useRef<string | null>(null);
 
-  const [layer, setLayer] = useState<MapLayer>(initialLayer);
-  const [category, setCategory] = useState<PlaceCategoryKey>("top");
+  const [category, setCategory] =
+    useState<DiscoverCategoryKey>(initialCategory);
+  const [showPeople, setShowPeople] = useState(true);
   const [liveCoords, setLiveCoords] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
   const [remotePlaces, setRemotePlaces] = useState<Place[] | null>(null);
-  const [placesSource, setPlacesSource] = useState<"google" | "mock">("mock");
-  const [selectedSectorId, setSelectedSectorId] = useState<string | null>(null);
+
+  const showingEvents = category === "events";
+  const placeCategory: PlaceCategoryKey =
+    category === "events" ? "top" : category;
 
   const center = useMemo(() => {
     if (liveCoords) return liveCoords;
@@ -187,40 +176,50 @@ export function DiscoverMap({
     return DEFAULT_MAP_CENTER;
   }, [liveCoords, userLat, userLng]);
 
-  const sectors = useMemo(
-    () => sectorsAround(center.lat, center.lng, category),
-    [center.lat, center.lng, category],
-  );
-
   const localPlaces = useMemo(() => {
+    if (showingEvents) return [];
     const around = placesAround(center.lat, center.lng);
-    if (category === "top") return around;
-    return around.filter((p) => p.categoryKey === category);
-  }, [center.lat, center.lng, category]);
+    if (placeCategory === "top") return around;
+    return around.filter((p) => p.categoryKey === placeCategory);
+  }, [center.lat, center.lng, placeCategory, showingEvents]);
 
-  const places = remotePlaces ?? localPlaces;
+  const places = useMemo(() => {
+    const source = remotePlaces ?? localPlaces;
+    const ranked = [...source].sort(
+      (a, b) =>
+        distanceSq(center.lat, center.lng, a.lat, a.lng) -
+        distanceSq(center.lat, center.lng, b.lat, b.lng),
+    );
+    return ranked.slice(0, placeCategory === "top" ? 8 : 10);
+  }, [remotePlaces, localPlaces, center.lat, center.lng, placeCategory]);
 
   const mapEvents = useMemo(
     () =>
-      filterEvents(eventsAround(center.lat, center.lng), "week").slice(0, 12),
+      filterEvents(eventsAround(center.lat, center.lng), "week").slice(0, 6),
     [center.lat, center.lng],
   );
 
-  const selectedSector = sectors.find((s) => s.id === selectedSectorId) ?? null;
-  const sectorPlaces = selectedSector
-    ? placesInSector(selectedSector, placesAround(center.lat, center.lng))
-    : [];
+  const nearbyPeople = useMemo(() => {
+    if (!showPeople || showingEvents) return [];
+    return [...travelers]
+      .sort(
+        (a, b) =>
+          distanceSq(center.lat, center.lng, a.lat, a.lng) -
+          distanceSq(center.lat, center.lng, b.lat, b.lng),
+      )
+      .slice(0, 6);
+  }, [travelers, showPeople, showingEvents, center.lat, center.lng]);
 
   // Fetch Google Places when key is configured (API falls back to mock).
   useEffect(() => {
-    if (layer !== "places") return;
+    if (showingEvents) return;
     let cancelled = false;
     const controller = new AbortController();
 
     async function load() {
       try {
         const res = await fetch(
-          `/api/places/nearby?lat=${center.lat}&lng=${center.lng}&category=${category}`,
+          `/api/places/nearby?lat=${center.lat}&lng=${center.lng}&category=${placeCategory}`,
           { signal: controller.signal },
         );
         if (!res.ok) return;
@@ -229,7 +228,6 @@ export function DiscoverMap({
           source: "google" | "mock";
         };
         if (cancelled) return;
-        setPlacesSource(data.source);
         setRemotePlaces(data.source === "google" ? data.places : null);
       } catch {
         /* keep local mock */
@@ -241,7 +239,7 @@ export function DiscoverMap({
       cancelled = true;
       controller.abort();
     };
-  }, [center.lat, center.lng, category, layer]);
+  }, [center.lat, center.lng, placeCategory, showingEvents]);
 
   // Create / destroy the map imperatively — avoids react-leaflet remount bugs.
   useEffect(() => {
@@ -303,14 +301,13 @@ export function DiscoverMap({
     );
   }, [userLat, userLng]);
 
-  // Focus an event from Events tab deep link.
+  // Focus an event deep link from an event profile.
   useEffect(() => {
     if (!focusEventId || focusedEventRef.current === focusEventId) return;
     const event = mapEvents.find((e) => e.id === focusEventId);
     if (!event) return;
     focusedEventRef.current = focusEventId;
-    setLayer("events");
-    setSelectedSectorId(null);
+    setCategory("events");
     mapRef.current?.setView([event.lat, event.lng], 16, { animate: true });
   }, [focusEventId, mapEvents]);
 
@@ -332,7 +329,7 @@ export function DiscoverMap({
       radius: 18,
       color: "#7c3aed",
       fillColor: "#8b5cf6",
-      fillOpacity: 0.18,
+      fillOpacity: 0.16,
       weight: 0,
     }).addTo(overlays);
 
@@ -344,54 +341,33 @@ export function DiscoverMap({
       weight: 3,
     }).addTo(overlays);
 
-    if (layer === "places") {
-      for (const sector of sectors) {
-        const fill = sectorFillColor(sector.accent);
-        const poly = L.polygon(sector.polygon, {
-          color: fill,
-          weight: 2,
-          opacity: 0.85,
-          fillColor: fill,
-          fillOpacity: selectedSectorId === sector.id ? 0.28 : 0.14,
-        })
+    if (showingEvents) {
+      for (const event of mapEvents) {
+        L.marker([event.lat, event.lng], { icon: eventIcon(event) })
           .on("click", () => {
-            setSelectedSectorId(sector.id);
-            map.fitBounds(poly.getBounds().pad(0.35), { animate: true });
-          })
-          .addTo(overlays);
-
-        const [clat, clng] = polygonCentroid(sector.polygon);
-        L.marker([clat, clng], {
-          icon: sectorLabelIcon(sector),
-          interactive: true,
-        })
-          .on("click", () => {
-            setSelectedSectorId(sector.id);
-            map.fitBounds(poly.getBounds().pad(0.35), { animate: true });
+            routerRef.current.push(`/events/${event.id}?from=explore`);
           })
           .addTo(overlays);
       }
-
+    } else {
       for (const place of places) {
-        L.marker([place.lat, place.lng], { icon: placeIcon(place) })
+        L.marker([place.lat, place.lng], {
+          icon: placeIcon(place),
+          zIndexOffset: 80,
+        })
           .on("click", () => {
             routerRef.current.push(`/discover/places/${place.id}?from=explore`);
           })
           .addTo(overlays);
       }
 
-      for (const traveler of travelers) {
-        L.marker([traveler.lat, traveler.lng], { icon: personIcon(traveler) })
+      for (const traveler of nearbyPeople) {
+        L.marker([traveler.lat, traveler.lng], {
+          icon: personIcon(traveler),
+          zIndexOffset: 120,
+        })
           .on("click", () => {
             routerRef.current.push(`/discover/${traveler.id}`);
-          })
-          .addTo(overlays);
-      }
-    } else {
-      for (const event of mapEvents) {
-        L.marker([event.lat, event.lng], { icon: eventIcon(event) })
-          .on("click", () => {
-            routerRef.current.push(`/events/${event.id}?from=explore`);
           })
           .addTo(overlays);
       }
@@ -402,11 +378,9 @@ export function DiscoverMap({
     center.lat,
     center.lng,
     places,
-    travelers,
-    sectors,
-    layer,
+    nearbyPeople,
+    showingEvents,
     mapEvents,
-    selectedSectorId,
     focusEventId,
   ]);
 
@@ -432,163 +406,90 @@ export function DiscoverMap({
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#e8eef3]">
       <div ref={containerRef} className="h-full w-full" />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] bg-gradient-to-b from-white via-white/70 to-transparent px-5 pb-14 pt-[max(1.25rem,env(safe-area-inset-top))]">
-        <div className="pointer-events-auto">
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
-            {title}
-          </h1>
-          <p className="mt-0.5 text-sm font-medium text-zinc-600">
-            {areaLabel || "Near you"}
-            {layer === "places" && placesSource === "google" ? (
-              <span className="text-zinc-400"> · Google Places</span>
-            ) : null}
-          </p>
-
-          <div className="mt-3 inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-zinc-200">
-            {(
-              [
-                { key: "places", label: "Places" },
-                { key: "events", label: "Events" },
-              ] as const
-            ).map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => {
-                  setLayer(item.key);
-                  setSelectedSectorId(null);
-                }}
-                className={cn(
-                  "rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
-                  layer === item.key
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-zinc-600 hover:text-zinc-900",
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Quiet top chrome — locate only, like Figma */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex items-start justify-end px-4 pt-[max(0.85rem,env(safe-area-inset-top))]">
+        <button
+          type="button"
+          onClick={recenter}
+          className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-zinc-800 shadow-md shadow-black/10 ring-1 ring-black/5 backdrop-blur-sm transition hover:bg-white"
+          aria-label="Center on my location"
+        >
+          <LocateFixed className="h-[18px] w-[18px]" />
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={recenter}
-        className="absolute bottom-[7.5rem] right-4 z-[1000] flex h-11 w-11 items-center justify-center rounded-full bg-white text-zinc-900 shadow-lg shadow-black/15 ring-1 ring-zinc-200 transition hover:bg-zinc-50"
-        aria-label="Center on my location"
-      >
-        <LocateFixed className="h-5 w-5" />
-      </button>
-
-      {selectedSector && layer === "places" ? (
-        <div className="absolute inset-x-0 bottom-0 z-[1100] rounded-t-3xl bg-white px-4 pb-4 pt-3 shadow-[0_-8px_30px_rgba(15,23,42,0.12)] ring-1 ring-zinc-200/80">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                Popular sector
-              </p>
-              <h2 className="mt-0.5 text-lg font-bold text-zinc-900">
-                <span aria-hidden className="mr-1.5">
-                  {selectedSector.emoji}
-                </span>
-                {selectedSector.name}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-600">
-                {selectedSector.description}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedSectorId(null)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-700"
-              aria-label="Close sector"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="mb-2 text-xs font-medium text-zinc-500">
-            {selectedSector.label} · {sectorPlaces.length} places
-          </p>
-          <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
-            {sectorPlaces.map((place) => (
-              <Link
-                key={place.id}
-                href={`/discover/places/${place.id}?from=explore`}
-                className="w-40 shrink-0 overflow-hidden rounded-2xl bg-zinc-50 ring-1 ring-zinc-200"
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] bg-gradient-to-t from-white via-white/80 to-transparent px-3 pb-3 pt-16">
+        <div className="pointer-events-auto space-y-2.5">
+          <div className="flex gap-2 px-0.5">
+            {!showingEvents ? (
+              <button
+                type="button"
+                onClick={() => setShowPeople((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium shadow-sm ring-1 transition",
+                  showPeople
+                    ? "bg-white/95 text-zinc-800 ring-zinc-200/80"
+                    : "bg-zinc-100/90 text-zinc-500 ring-zinc-200/70",
+                )}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={place.photo}
-                  alt=""
-                  className="h-20 w-full object-cover"
-                />
-                <div className="p-2.5">
-                  <p className="truncate text-sm font-semibold text-zinc-900">
-                    {place.name}
-                  </p>
-                  <p className="truncate text-xs text-zinc-500">
-                    {place.emoji} {place.category}
-                  </p>
-                </div>
-              </Link>
-            ))}
-            {sectorPlaces.length === 0 ? (
-              <p className="py-4 text-sm text-zinc-500">
-                No curated venues in this sector yet.
-              </p>
+                {showPeople ? "everyone" : "places only"}
+              </button>
+            ) : null}
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-zinc-700 shadow-sm ring-1 ring-zinc-200/80">
+              <Clock3 className="h-3 w-3 text-zinc-500" />
+              {showingEvents ? "this week" : "open now"}
+            </span>
+            {areaLabel ? (
+              <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-zinc-500 shadow-sm ring-1 ring-zinc-200/70">
+                {areaLabel}
+              </span>
             ) : null}
           </div>
-        </div>
-      ) : (
-        <div className="absolute inset-x-0 bottom-0 z-[1000] bg-gradient-to-t from-white via-white/95 to-transparent px-3 pb-3 pt-10">
-          {layer === "places" ? (
-            <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
-              {PLACE_CATEGORIES.map((cat) => {
-                const active = category === cat.key;
-                return (
-                  <button
-                    key={cat.key}
-                    type="button"
-                    onClick={() => {
-                      setCategory(cat.key);
-                      setSelectedSectorId(null);
-                    }}
-                    className={cn(
-                      "flex shrink-0 flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[11px] font-semibold transition",
-                      active
-                        ? "bg-primary text-white shadow-md shadow-primary/25"
-                        : "bg-white text-zinc-800 shadow-sm ring-1 ring-zinc-200",
-                    )}
-                  >
-                    <span className="text-lg leading-none" aria-hidden>
-                      {cat.emoji}
-                    </span>
-                    {cat.label}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
-              {mapEvents.slice(0, 6).map((event) => (
+
+          <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-0.5">
+            {DISCOVER_CATEGORIES.map((cat) => {
+              const active = category === cat.key;
+              return (
+                <button
+                  key={cat.key}
+                  type="button"
+                  onClick={() => setCategory(cat.key)}
+                  className={cn(
+                    "flex shrink-0 flex-col items-center gap-0.5 rounded-2xl px-2.5 py-1.5 text-[10px] font-medium capitalize transition",
+                    active
+                      ? "bg-white text-zinc-900 shadow-md shadow-black/10 ring-1 ring-zinc-200"
+                      : "bg-white/80 text-zinc-600 shadow-sm ring-1 ring-zinc-200/70 hover:bg-white",
+                  )}
+                >
+                  <span className="text-[1.35rem] leading-none" aria-hidden>
+                    {cat.emoji}
+                  </span>
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {showingEvents ? (
+            <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-0.5">
+              {mapEvents.map((event) => (
                 <Link
                   key={event.id}
-                  href={`/events/${event.id}`}
-                  className="w-44 shrink-0 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200"
+                  href={`/events/${event.id}?from=explore`}
+                  className="w-40 shrink-0 rounded-2xl bg-white/95 p-2.5 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur-sm"
                 >
-                  <p className="truncate text-sm font-semibold text-zinc-900">
+                  <p className="truncate text-[12px] font-semibold text-zinc-900">
                     {event.emoji} {event.title}
                   </p>
-                  <p className="mt-1 truncate text-xs text-zinc-500">
+                  <p className="mt-0.5 truncate text-[10px] text-zinc-500">
                     {formatEventWhen(event.startsAt)}
                   </p>
                 </Link>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
-      )}
+      </div>
     </div>
   );
 }

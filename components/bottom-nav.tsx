@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  CalendarDays,
-  Compass,
-  Home,
-  MessageCircle,
-  UserRound,
-} from "lucide-react";
+import { Compass, Home, MessageCircle, UserRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,7 +10,6 @@ const ITEMS = [
   { href: "/discover", label: "Discover", icon: Home },
   { href: "/chats", label: "Chats", icon: MessageCircle },
   { href: "/explore", label: "Explore", icon: Compass },
-  { href: "/events", label: "Events", icon: CalendarDays },
   { href: "/profile", label: "Profile", icon: UserRound },
 ] as const;
 
@@ -27,14 +20,14 @@ export function BottomNav() {
   if (
     pathname.startsWith("/discover/") ||
     pathname.startsWith("/messages") ||
-    (pathname.startsWith("/events/") && pathname !== "/events")
+    pathname.startsWith("/events/")
   ) {
     return null;
   }
 
   return (
     <nav className="safe-bottom-compact border-t border-border/70 bg-background px-0.5 pt-3">
-      <ul className="grid grid-cols-5 gap-0">
+      <ul className="grid grid-cols-4 gap-0">
         {ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
