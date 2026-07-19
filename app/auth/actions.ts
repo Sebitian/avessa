@@ -9,12 +9,21 @@ export type AuthActionResult =
 
 function authErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
+    const cause = (error as Error & { cause?: { code?: string; message?: string } })
+      .cause;
+    const detail = cause?.code || cause?.message;
     if (/failed to fetch|fetch failed|networkerror/i.test(error.message)) {
-      return "Could not reach Supabase from the server. Check NEXT_PUBLIC_SUPABASE_URL on Vercel and redeploy.";
+      return detail
+        ? `Could not reach Supabase (${detail}). Check Vercel env vars and redeploy.`
+        : "Could not reach Supabase from the server. Check NEXT_PUBLIC_SUPABASE_URL on Vercel and redeploy.";
     }
-    return error.message;
+    return detail ? `${error.message} (${detail})` : error.message;
   }
   return "An error occurred";
+}
+
+function fromAuthError(error: { message: string }): AuthActionResult {
+  return { ok: false, error: authErrorMessage(new Error(error.message)) };
 }
 
 export async function loginWithPassword(
@@ -27,7 +36,7 @@ export async function loginWithPassword(
       email,
       password,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return fromAuthError(error);
 
     const nextPath = await getPostAuthPath();
     return { ok: true, nextPath };
@@ -48,7 +57,7 @@ export async function signUpWithPassword(
       password,
       options: { emailRedirectTo },
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return fromAuthError(error);
 
     return { ok: true, nextPath: "/auth/sign-up-success" };
   } catch (error: unknown) {
