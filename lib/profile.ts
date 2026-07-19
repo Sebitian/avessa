@@ -6,10 +6,14 @@ export type Profile = {
   age: number | null;
   nationality: string | null;
   current_city: string | null;
+  home_city: string | null;
   languages: string[] | null;
   bio: string | null;
   avatar_url: string | null;
   interests: string[] | null;
+  traveler_status: "traveling" | "local" | "both" | null;
+  looking_for: string[] | null;
+  gender: string | null;
   approx_lat: number | null;
   approx_lng: number | null;
   area_label: string | null;
@@ -56,5 +60,5 @@ export async function getPostAuthPath(): Promise<string> {
   if (!profile?.onboarding_complete) {
     return "/onboarding/profile";
   }
-  return "/protected";
+  return "/discover";
 }

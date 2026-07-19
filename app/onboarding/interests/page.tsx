@@ -21,7 +21,7 @@ async function InterestsContent() {
 
   const profile = await getCurrentProfile();
   if (profile?.onboarding_complete) {
-    redirect("/protected");
+    redirect("/discover");
   }
 
   return <InterestsForm initialInterests={profile?.interests} />;

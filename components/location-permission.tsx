@@ -22,7 +22,7 @@ export function LocationPermission() {
         area_label: coords ? "Near you" : null,
         onboarding_complete: true,
       });
-      router.push("/protected");
+      router.push("/discover");
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not finish setup");

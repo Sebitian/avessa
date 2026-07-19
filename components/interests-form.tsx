@@ -47,6 +47,9 @@ export function InterestsForm({ initialInterests }: InterestsFormProps) {
         <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">
           What are you interested in?
         </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Choose all that apply.
+        </p>
       </header>
 
       <div className="flex flex-1 flex-col overflow-y-auto px-6 py-6">

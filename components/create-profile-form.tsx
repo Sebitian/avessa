@@ -10,30 +10,47 @@ import { Label } from "@/components/ui/label";
 import { upsertCurrentProfile } from "@/lib/profile-client";
 import {
   CITIES,
+  GENDER_OPTIONS,
   LANGUAGE_OPTIONS,
+  LOOKING_FOR_OPTIONS,
   NATIONALITIES,
+  TRAVELER_STATUSES,
+  type LookingFor,
+  type TravelerStatus,
 } from "@/lib/profile-options";
 import type { Profile } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 
 type CreateProfileFormProps = {
   initialProfile?: Profile | null;
+  afterSaveHref?: string;
 };
 
-export function CreateProfileForm({ initialProfile }: CreateProfileFormProps) {
+export function CreateProfileForm({
+  initialProfile,
+  afterSaveHref = "/onboarding/interests",
+}: CreateProfileFormProps) {
   const router = useRouter();
   const [firstName, setFirstName] = useState(initialProfile?.first_name ?? "");
   const [age, setAge] = useState(
     initialProfile?.age != null ? String(initialProfile.age) : "",
   );
+  const [gender, setGender] = useState(initialProfile?.gender ?? "");
   const [nationality, setNationality] = useState(
     initialProfile?.nationality ?? "",
   );
+  const [homeCity, setHomeCity] = useState(initialProfile?.home_city ?? "");
   const [currentCity, setCurrentCity] = useState(
     initialProfile?.current_city ?? "",
   );
   const [languages, setLanguages] = useState<string[]>(
     initialProfile?.languages ?? [],
+  );
+  const [travelerStatus, setTravelerStatus] = useState<TravelerStatus | "">(
+    initialProfile?.traveler_status ?? "",
+  );
+  const [lookingFor, setLookingFor] = useState<LookingFor[]>(
+    (initialProfile?.looking_for as LookingFor[] | null) ?? [],
   );
   const [bio, setBio] = useState(initialProfile?.bio ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +67,12 @@ export function CreateProfileForm({ initialProfile }: CreateProfileFormProps) {
     );
   };
 
+  const toggleLookingFor = (value: LookingFor) => {
+    setLookingFor((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -62,20 +85,28 @@ export function CreateProfileForm({ initialProfile }: CreateProfileFormProps) {
     setIsLoading(true);
     try {
       const parsedAge = age.trim() ? Number.parseInt(age, 10) : null;
-      if (age.trim() && (Number.isNaN(parsedAge) || parsedAge! < 13 || parsedAge! > 120)) {
+      if (
+        age.trim() &&
+        (Number.isNaN(parsedAge) || parsedAge! < 13 || parsedAge! > 120)
+      ) {
         throw new Error("Enter a valid age");
       }
 
       await upsertCurrentProfile({
         first_name: firstName.trim(),
         age: parsedAge,
+        gender: gender || null,
         nationality: nationality || null,
+        home_city: homeCity || null,
         current_city: currentCity || null,
         languages: languages.length ? languages : null,
+        traveler_status: travelerStatus || null,
+        looking_for: lookingFor.length ? lookingFor : null,
         bio: bio.trim() || null,
       });
 
-      router.push("/onboarding/interests");
+      router.push(afterSaveHref);
+      router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not save profile");
     } finally {
@@ -119,7 +150,7 @@ export function CreateProfileForm({ initialProfile }: CreateProfileFormProps) {
             id="first-name"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            placeholder="Your first name"
+            placeholder="Imran"
             className="h-11 rounded-xl"
             required
           />
@@ -139,6 +170,16 @@ export function CreateProfileForm({ initialProfile }: CreateProfileFormProps) {
           />
         </Field>
 
+        <Field label="Gender (optional)" htmlFor="gender">
+          <Select
+            id="gender"
+            value={gender}
+            onChange={setGender}
+            placeholder="Select gender"
+            options={GENDER_OPTIONS}
+          />
+        </Field>
+
         <Field label="Nationality" htmlFor="nationality">
           <Select
             id="nationality"
@@ -149,19 +190,31 @@ export function CreateProfileForm({ initialProfile }: CreateProfileFormProps) {
           />
         </Field>
 
+        <Field label="Home City" htmlFor="home-city">
+          <Select
+            id="home-city"
+            value={homeCity}
+            onChange={setHomeCity}
+            placeholder="Where are you from?"
+            options={CITIES}
+          />
+        </Field>
+
         <Field label="Current City" htmlFor="current-city">
           <Select
             id="current-city"
             value={currentCity}
             onChange={setCurrentCity}
-            placeholder="Select city"
+            placeholder="Where are you now?"
             options={CITIES}
           />
         </Field>
 
         <fieldset>
           <Legend>Languages</Legend>
-          <p className="mb-2 text-sm text-muted-foreground">{languageSummary}</p>
+          <p className="mb-2 text-sm text-muted-foreground">
+            {languageSummary}
+          </p>
           <div className="flex flex-wrap gap-2">
             {LANGUAGE_OPTIONS.map((lang) => {
               const selected = languages.includes(lang);
@@ -184,12 +237,66 @@ export function CreateProfileForm({ initialProfile }: CreateProfileFormProps) {
           </div>
         </fieldset>
 
+        <fieldset>
+          <Legend>I&apos;m currently</Legend>
+          <p className="mb-2 text-sm text-muted-foreground">
+            Choose one that fits you right now.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {TRAVELER_STATUSES.map((status) => {
+              const selected = travelerStatus === status.value;
+              return (
+                <button
+                  key={status.value}
+                  type="button"
+                  onClick={() => setTravelerStatus(status.value)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-foreground hover:bg-muted",
+                  )}
+                >
+                  {status.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <Legend>Looking to meet</Legend>
+          <p className="mb-2 text-sm text-muted-foreground">
+            Choose all that apply.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {LOOKING_FOR_OPTIONS.map((option) => {
+              const selected = lookingFor.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => toggleLookingFor(option.value)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-foreground hover:bg-muted",
+                  )}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
         <Field label="Bio" htmlFor="bio">
           <textarea
             id="bio"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
-            placeholder="A little about you..."
+            placeholder="Digital nomad and lover of good coffee & great people."
             rows={3}
             className="flex w-full rounded-xl border border-input bg-transparent px-3 py-2 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
           />

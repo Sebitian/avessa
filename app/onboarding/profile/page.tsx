@@ -20,9 +20,12 @@ async function CreateProfileContent() {
   }
 
   const profile = await getCurrentProfile();
-  if (profile?.onboarding_complete) {
-    redirect("/protected");
-  }
-
-  return <CreateProfileForm initialProfile={profile} />;
+  return (
+    <CreateProfileForm
+      initialProfile={profile}
+      afterSaveHref={
+        profile?.onboarding_complete ? "/profile" : "/onboarding/interests"
+      }
+    />
+  );
 }

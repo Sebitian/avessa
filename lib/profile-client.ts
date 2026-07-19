@@ -38,5 +38,5 @@ export async function getClientPostAuthPath(): Promise<string> {
     return "/onboarding/profile";
   }
 
-  return "/protected";
+  return "/discover";
 }
