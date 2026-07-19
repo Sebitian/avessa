@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { signUpWithPassword } from "@/app/auth/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -39,16 +39,16 @@ export function SignUpForm({
     }
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signUp({
+      const result = await signUpWithPassword(
         email,
         password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/onboarding/profile`,
-        },
-      });
-      if (error) throw error;
-      router.push("/auth/sign-up-success");
+        `${window.location.origin}/onboarding/profile`,
+      );
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(result.nextPath);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {

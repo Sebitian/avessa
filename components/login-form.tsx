@@ -1,8 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-import { getClientPostAuthPath } from "@/lib/profile-client";
+import { loginWithPassword } from "@/app/auth/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,14 +32,12 @@ export function LoginForm({
     setError(null);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
-      const nextPath = await getClientPostAuthPath();
-      router.push(nextPath);
+      const result = await loginWithPassword(email, password);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(result.nextPath);
       router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
