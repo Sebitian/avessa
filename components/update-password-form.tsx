@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { getClientPostAuthPath } from "@/lib/profile-client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,8 +33,7 @@ export function UpdatePasswordForm({
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      const nextPath = await getClientPostAuthPath();
-      router.push(nextPath);
+      router.push("/protected");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
