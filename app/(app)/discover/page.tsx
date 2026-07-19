@@ -1,9 +1,13 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
-import { DiscoverHome } from "@/components/discover-home";
+import { DiscoverFeed } from "@/components/discover-feed";
 import { OnboardingFallback } from "@/components/onboarding-fallback";
-import { getCurrentProfile, getSessionUser } from "@/lib/profile";
+import {
+  getCurrentProfile,
+  getNearbyTravelers,
+  getSessionUser,
+} from "@/lib/profile";
 
 export default function DiscoverPage() {
   return (
@@ -24,10 +28,13 @@ async function DiscoverContent() {
     redirect("/onboarding/profile");
   }
 
+  const travelers = await getNearbyTravelers();
+
   return (
-    <DiscoverHome
+    <DiscoverFeed
       areaLabel={profile.area_label}
       city={profile.current_city}
+      travelers={travelers}
     />
   );
 }

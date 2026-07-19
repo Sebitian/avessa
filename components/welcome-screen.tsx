@@ -1,18 +1,23 @@
 import Link from "next/link";
 
+import { AvessaLogo } from "@/components/avessa-logo";
 import { Button } from "@/components/ui/button";
 
 export function WelcomeScreen() {
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-background px-6 pb-10 pt-16">
-      <div className="flex flex-1 flex-col justify-center">
-        <h1 className="text-[2.5rem] font-bold leading-[1.1] tracking-tight text-foreground">
-          Never a Stranger.
-        </h1>
-        <p className="mt-4 max-w-[18rem] text-base leading-relaxed text-muted-foreground">
-          Meet travelers and locals. Discover authentic places. Explore with
-          confidence.
-        </p>
+    <div className="flex min-h-full flex-1 flex-col bg-background px-6 pb-10 pt-12">
+      <div className="flex flex-1 flex-col">
+        <div className="flex justify-center pt-4">
+          <AvessaLogo size="lg" />
+        </div>
+
+        <div className="mt-10 flex flex-1 flex-col justify-center">
+          <h1 className="sr-only">Never a Stranger.</h1>
+          <p className="max-w-[20rem] text-base leading-relaxed text-muted-foreground">
+            Meet travelers and locals. Discover authentic places. Explore with
+            confidence.
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col gap-6">

@@ -30,7 +30,7 @@ export function ProfileView({ profile, email }: ProfileViewProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background">
-      <header className="safe-top flex items-center justify-between px-5 pb-2 pt-6">
+      <header className="safe-top flex items-center justify-between px-5 pb-2">
         <h1 className="text-2xl font-bold tracking-tight">Profile</h1>
         <div className="flex items-center gap-1">
           <Link

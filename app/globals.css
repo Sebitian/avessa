@@ -72,11 +72,11 @@
 
 @layer utilities {
   .safe-bottom-compact {
-    padding-bottom: min(env(safe-area-inset-bottom, 0px), 0.5rem);
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   }
 
   .safe-top {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
   }
 
   .scrollbar-hide {
@@ -87,4 +87,231 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* Discover map — cute place bubbles */
+.avessa-place-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.avessa-place-bubble {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: max-content;
+  max-width: 12.5rem;
+  pointer-events: auto;
+  filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.14));
+}
+
+.avessa-place-bubble__icon {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 1.25rem;
+  line-height: 1;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 8px 18px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.avessa-place-bubble__label {
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 6px 14px rgba(15, 23, 42, 0.1);
+}
+
+.avessa-place-bubble__name {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #18181b;
+}
+
+.avessa-place-bubble__dot {
+  display: inline-block;
+  height: 0.4rem;
+  width: 0.4rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+}
+
+.avessa-place-bubble__tag {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: #3f3f46;
+}
+
+.leaflet-container {
+  font: inherit;
+  background: #e8eef3;
+}
+
+/* Discover map — people bubbles */
+.avessa-person-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.avessa-person-bubble {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: max-content;
+  max-width: 11.5rem;
+  pointer-events: auto;
+  filter: drop-shadow(0 8px 16px rgba(91, 33, 182, 0.22));
+}
+
+.avessa-person-bubble__avatar {
+  position: relative;
+  display: flex;
+  height: 3.25rem;
+  width: 3.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 5px rgba(124, 58, 237, 0.35);
+}
+
+.avessa-person-bubble__avatar img {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  background: #ede9fe;
+}
+
+.avessa-person-bubble__fallback {
+  position: relative;
+  z-index: 0;
+}
+
+.avessa-person-bubble__label {
+  min-width: 0;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 6px 14px rgba(15, 23, 42, 0.1);
+}
+
+.avessa-person-bubble__name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #18181b;
+}
+
+.avessa-person-bubble__meta {
+  margin-top: 0.12rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #52525b;
+}
+
+/* Explore map — event bubbles */
+.avessa-event-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.avessa-event-bubble {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: max-content;
+  max-width: 13rem;
+  pointer-events: auto;
+  filter: drop-shadow(0 6px 14px rgba(190, 24, 93, 0.2));
+}
+
+.avessa-event-bubble__icon {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #fff;
+  font-size: 1.2rem;
+  box-shadow:
+    0 0 0 2px #fce7f3,
+    0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+.avessa-event-bubble__label {
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 6px 14px rgba(15, 23, 42, 0.1);
+}
+
+.avessa-event-bubble__name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #18181b;
+}
+
+.avessa-event-bubble__tag {
+  margin-top: 0.12rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #be185d;
+}
+
+/* Explore map — sector badges */
+.avessa-sector-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.avessa-sector-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.96);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #18181b;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.1),
+    0 6px 14px rgba(15, 23, 42, 0.12);
+  pointer-events: auto;
 }

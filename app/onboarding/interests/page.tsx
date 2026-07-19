@@ -20,9 +20,6 @@ async function InterestsContent() {
   }
 
   const profile = await getCurrentProfile();
-  if (profile?.onboarding_complete) {
-    redirect("/discover");
-  }
 
   return <InterestsForm initialInterests={profile?.interests} />;
 }
