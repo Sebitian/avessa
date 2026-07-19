@@ -119,7 +119,7 @@ export function CreateProfileForm({
       onSubmit={handleSubmit}
       className="flex min-h-full flex-1 flex-col bg-background"
     >
-      <header className="safe-top flex items-center gap-3 px-4 pb-2 pt-4">
+      <header className="safe-top flex items-center gap-3 px-4 pb-2">
         <button
           type="button"
           onClick={() => router.back()}

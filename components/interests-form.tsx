@@ -43,7 +43,7 @@ export function InterestsForm({ initialInterests }: InterestsFormProps) {
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
-      <header className="safe-top px-6 pb-2 pt-10">
+      <header className="safe-top px-6 pb-2">
         <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">
           What are you interested in?
         </h1>

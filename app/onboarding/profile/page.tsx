@@ -23,9 +23,7 @@ async function CreateProfileContent() {
   return (
     <CreateProfileForm
       initialProfile={profile}
-      afterSaveHref={
-        profile?.onboarding_complete ? "/profile" : "/onboarding/interests"
-      }
+      afterSaveHref="/onboarding/interests"
     />
   );
 }
