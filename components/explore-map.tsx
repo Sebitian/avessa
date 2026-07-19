@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 
-import type { DiscoverTraveler } from "@/lib/profile";
+import type { DiscoverCategoryKey } from "@/lib/mock-data";
+import type { DiscoverTraveler } from "@/lib/presence";
 
 const DiscoverMap = dynamic(
   () =>
@@ -24,7 +25,7 @@ type ExploreMapProps = {
   userLng?: number | null;
   travelers: DiscoverTraveler[];
   focusEventId?: string | null;
-  initialLayer?: "places" | "events";
+  initialCategory?: DiscoverCategoryKey;
 };
 
 export function ExploreMap({
@@ -34,7 +35,7 @@ export function ExploreMap({
   userLng,
   travelers,
   focusEventId = null,
-  initialLayer = "places",
+  initialCategory = "top",
 }: ExploreMapProps) {
   const location = areaLabel || city || "Near you";
 
@@ -47,7 +48,7 @@ export function ExploreMap({
         travelers={travelers}
         title="Explore"
         focusEventId={focusEventId}
-        initialLayer={initialLayer}
+        initialCategory={initialCategory}
       />
     </div>
   );

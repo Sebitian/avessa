@@ -13,6 +13,8 @@ export type NearbyTraveler = {
   lookingFor: string[];
   travelerStatus: string;
   online?: boolean;
+  /** Relative time when offline, e.g. "2h ago" */
+  lastSeen?: string | null;
   prompts?: { question: string; answer: string }[];
 };
 
@@ -54,6 +56,24 @@ export const PLACE_CATEGORIES: {
   emoji: string;
 }[] = [
   { key: "top", label: "top picks", emoji: "⭐" },
+  { key: "eat", label: "eat", emoji: "🍣" },
+  { key: "cafes", label: "coffee", emoji: "☕" },
+  { key: "bars", label: "bars", emoji: "🍸" },
+  { key: "go-out", label: "go out", emoji: "🪩" },
+  { key: "shops", label: "shops", emoji: "👜" },
+  { key: "leisure", label: "outdoors", emoji: "🌅" },
+];
+
+/** Discover / Explore chips — place filters plus events (no separate Events tab). */
+export type DiscoverCategoryKey = PlaceCategoryKey | "events";
+
+export const DISCOVER_CATEGORIES: {
+  key: DiscoverCategoryKey;
+  label: string;
+  emoji: string;
+}[] = [
+  { key: "top", label: "top picks", emoji: "⭐" },
+  { key: "events", label: "events", emoji: "🎟️" },
   { key: "eat", label: "eat", emoji: "🍣" },
   { key: "cafes", label: "coffee", emoji: "☕" },
   { key: "bars", label: "bars", emoji: "🍸" },
@@ -120,6 +140,7 @@ export const NEARBY_TRAVELERS: NearbyTraveler[] = [
     lookingFor: ["Dinner plans", "Nightlife"],
     travelerStatus: "Living here",
     online: false,
+    lastSeen: "2h ago",
     prompts: [
       {
         question: "My go-to order",
@@ -458,6 +479,41 @@ export const PLACES: Place[] = [
 
 export function getPlaceById(id: string): Place | undefined {
   return PLACES.find((place) => place.id === id);
+}
+
+/** Stable hash for deterministic demo stats / place picks per traveler. */
+export function seedFromId(id: string, salt = 0): number {
+  let h = salt >>> 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (Math.imul(h, 31) + id.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+/** Curated “recent places” for a traveler profile — from our place list, not screenshot data. */
+export function recentPlacesForTraveler(travelerId: string, count = 3): Place[] {
+  if (PLACES.length === 0) return [];
+  const start = seedFromId(travelerId, 17) % PLACES.length;
+  const picked: Place[] = [];
+  for (let i = 0; i < Math.min(count, PLACES.length); i++) {
+    picked.push(PLACES[(start + i * 3) % PLACES.length]);
+  }
+  return picked;
+}
+
+export function travelerProfileStats(travelerId: string) {
+  const a = seedFromId(travelerId, 1);
+  const b = seedFromId(travelerId, 2);
+  const c = seedFromId(travelerId, 3);
+  const d = seedFromId(travelerId, 4);
+  return {
+    allPlaces: 8 + (a % 40),
+    wantToTry: 2 + (b % 18),
+    favorites: 1 + (c % 14),
+    recommend: 1 + (d % 10),
+    following: 20 + (a % 180),
+    followers: 10 + (b % 220),
+  };
 }
 
 /** Remap Barcelona mock POIs so they cluster around the user's coords. */

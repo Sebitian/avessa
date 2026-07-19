@@ -13,10 +13,10 @@ type EventProfileProps = {
 
 export function EventProfile({
   event,
-  backHref = "/events",
+  backHref = "/discover?category=events",
 }: EventProfileProps) {
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${event.lat},${event.lng}`;
-  const exploreHref = `/explore?layer=events&event=${event.id}`;
+  const exploreHref = `/explore?category=events&event=${event.id}`;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col bg-background">

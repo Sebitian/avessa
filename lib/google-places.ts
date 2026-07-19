@@ -188,7 +188,7 @@ export async function fetchNearbyPlaces(opts: {
         return scoreB - scoreA;
       });
 
-      for (const result of ranked.slice(0, category === "top" ? 4 : 12)) {
+      for (const result of ranked.slice(0, category === "top" ? 2 : 8)) {
         const place = toPlace(result, cat, apiKey);
         if (!place || seen.has(place.id)) continue;
         seen.add(place.id);
