@@ -136,6 +136,25 @@ export function hasGooglePlacesKey(): boolean {
   return Boolean(process.env.GOOGLE_MAPS_API_KEY?.trim());
 }
 
+export type LocationSuggestion = {
+  id: string;
+  label: string;
+  secondary?: string;
+  source: "google" | "nominatim";
+  /** Present for Nominatim hits so we can place without a second lookup. */
+  lat?: number;
+  lng?: number;
+  currentCity?: string;
+};
+
+export type ResolvedLocation = {
+  lat: number;
+  lng: number;
+  areaLabel: string;
+  currentCity: string;
+  placeId?: string;
+};
+
 export async function fetchNearbyPlaces(opts: {
   lat: number;
   lng: number;
@@ -298,5 +317,329 @@ export async function fetchGooglePlaceDetails(
     };
   } catch {
     return null;
+  }
+}
+
+function shortAreaLabel(primary: string, address?: string): string {
+  const name = primary.trim();
+  if (name) return name.length > 48 ? `${name.slice(0, 45)}…` : name;
+  if (!address) return "Nearby";
+  const first = address.split(",")[0]?.trim();
+  return first || "Nearby";
+}
+
+function cityFromAddress(address?: string, fallbackName?: string): string {
+  if (!address) return fallbackName?.trim() || "Nearby";
+  const parts = address
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    // Prefer "City, Country" from the end of the address.
+    const country = parts[parts.length - 1];
+    const city = parts[parts.length - 2];
+    if (city && country) return `${city}, ${country}`;
+  }
+  return parts[0] || fallbackName?.trim() || "Nearby";
+}
+
+async function nominatimSearch(
+  query: string,
+): Promise<LocationSuggestion[]> {
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", query);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("limit", "6");
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "AvessaMVP/1.0 (explore-location)",
+    },
+    next: { revalidate: 0 },
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as Array<{
+    place_id: number;
+    display_name: string;
+    name?: string;
+    lat: string;
+    lon: string;
+    address?: Record<string, string>;
+  }>;
+
+  return data.map((item) => {
+    const label = item.name || item.display_name.split(",")[0]?.trim() || "Place";
+    const secondary = item.display_name
+      .split(",")
+      .slice(1, 3)
+      .map((s) => s.trim())
+      .join(", ");
+    const cityBits = [
+      item.address?.city ||
+        item.address?.town ||
+        item.address?.village ||
+        item.address?.municipality,
+      item.address?.country,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    return {
+      id: `osm_${item.place_id}`,
+      label,
+      secondary: secondary || undefined,
+      source: "nominatim" as const,
+      lat: Number(item.lat),
+      lng: Number(item.lon),
+      currentCity: cityBits || cityFromAddress(item.display_name, label),
+    };
+  });
+}
+
+async function nominatimReverse(
+  lat: number,
+  lng: number,
+): Promise<ResolvedLocation | null> {
+  const url = new URL("https://nominatim.openstreetmap.org/reverse");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "AvessaMVP/1.0 (explore-location)",
+    },
+    next: { revalidate: 0 },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    display_name?: string;
+    name?: string;
+    address?: Record<string, string>;
+  };
+
+  const name =
+    data.name ||
+    data.address?.neighbourhood ||
+    data.address?.suburb ||
+    data.address?.quarter ||
+    data.address?.city_district ||
+    data.address?.city ||
+    "Nearby";
+  const cityBits = [
+    data.address?.city ||
+      data.address?.town ||
+      data.address?.village ||
+      data.address?.municipality,
+    data.address?.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    lat,
+    lng,
+    areaLabel: shortAreaLabel(name, data.display_name),
+    currentCity: cityBits || cityFromAddress(data.display_name, name),
+  };
+}
+
+export async function fetchPlaceAutocomplete(
+  query: string,
+  bias?: { lat: number; lng: number },
+): Promise<LocationSuggestion[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  if (!apiKey) {
+    try {
+      return await nominatimSearch(q);
+    } catch {
+      return [];
+    }
+  }
+
+  const url = new URL(
+    "https://maps.googleapis.com/maps/api/place/autocomplete/json",
+  );
+  url.searchParams.set("input", q);
+  url.searchParams.set("key", apiKey);
+  if (bias) {
+    url.searchParams.set("location", `${bias.lat},${bias.lng}`);
+    url.searchParams.set("radius", "50000");
+  }
+
+  try {
+    const res = await fetch(url.toString(), { next: { revalidate: 0 } });
+    if (!res.ok) return nominatimSearch(q);
+    const data = (await res.json()) as {
+      status: string;
+      predictions?: Array<{
+        place_id: string;
+        description: string;
+        structured_formatting?: {
+          main_text?: string;
+          secondary_text?: string;
+        };
+      }>;
+    };
+    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+      return nominatimSearch(q);
+    }
+    return (data.predictions ?? []).slice(0, 6).map((p) => ({
+      id: p.place_id,
+      label:
+        p.structured_formatting?.main_text ||
+        p.description.split(",")[0]?.trim() ||
+        p.description,
+      secondary:
+        p.structured_formatting?.secondary_text ||
+        p.description.split(",").slice(1).join(",").trim() ||
+        undefined,
+      source: "google" as const,
+    }));
+  } catch {
+    return nominatimSearch(q);
+  }
+}
+
+export async function fetchPlaceLocation(
+  placeId: string,
+): Promise<ResolvedLocation | null> {
+  if (placeId.startsWith("osm_")) {
+    // Nominatim suggestions already include lat/lng; client should use those.
+    return null;
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  const url = new URL(
+    "https://maps.googleapis.com/maps/api/place/details/json",
+  );
+  url.searchParams.set("place_id", placeId);
+  url.searchParams.set(
+    "fields",
+    "place_id,name,formatted_address,geometry,address_component",
+  );
+  url.searchParams.set("key", apiKey);
+
+  try {
+    const res = await fetch(url.toString(), { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      status: string;
+      result?: {
+        place_id: string;
+        name?: string;
+        formatted_address?: string;
+        geometry?: { location?: { lat: number; lng: number } };
+        address_components?: Array<{
+          long_name: string;
+          short_name: string;
+          types: string[];
+        }>;
+      };
+    };
+    if (data.status !== "OK" || !data.result) return null;
+    const lat = data.result.geometry?.location?.lat;
+    const lng = data.result.geometry?.location?.lng;
+    if (lat == null || lng == null) return null;
+
+    const comps = data.result.address_components ?? [];
+    const locality =
+      comps.find((c) => c.types.includes("locality"))?.long_name ||
+      comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+      comps.find((c) => c.types.includes("administrative_area_level_2"))
+        ?.long_name;
+    const country = comps.find((c) => c.types.includes("country"))?.long_name;
+    const currentCity =
+      locality && country
+        ? `${locality}, ${country}`
+        : cityFromAddress(data.result.formatted_address, data.result.name);
+
+    return {
+      lat,
+      lng,
+      areaLabel: shortAreaLabel(
+        data.result.name || "Nearby",
+        data.result.formatted_address,
+      ),
+      currentCity,
+      placeId: data.result.place_id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<ResolvedLocation | null> {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  if (!apiKey) {
+    try {
+      return await nominatimReverse(lat, lng);
+    } catch {
+      return {
+        lat,
+        lng,
+        areaLabel: "Nearby",
+        currentCity: "Nearby",
+      };
+    }
+  }
+
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("latlng", `${lat},${lng}`);
+  url.searchParams.set("key", apiKey);
+
+  try {
+    const res = await fetch(url.toString(), { next: { revalidate: 0 } });
+    if (!res.ok) return nominatimReverse(lat, lng);
+    const data = (await res.json()) as {
+      status: string;
+      results?: Array<{
+        formatted_address?: string;
+        address_components?: Array<{
+          long_name: string;
+          types: string[];
+        }>;
+      }>;
+    };
+    if (data.status !== "OK" || !data.results?.[0]) {
+      return nominatimReverse(lat, lng);
+    }
+
+    const result = data.results[0];
+    const comps = result.address_components ?? [];
+    const neighborhood =
+      comps.find((c) => c.types.includes("neighborhood"))?.long_name ||
+      comps.find((c) => c.types.includes("sublocality"))?.long_name ||
+      comps.find((c) => c.types.includes("sublocality_level_1"))?.long_name ||
+      comps.find((c) => c.types.includes("route"))?.long_name ||
+      comps.find((c) => c.types.includes("locality"))?.long_name ||
+      "Nearby";
+    const locality =
+      comps.find((c) => c.types.includes("locality"))?.long_name ||
+      comps.find((c) => c.types.includes("postal_town"))?.long_name;
+    const country = comps.find((c) => c.types.includes("country"))?.long_name;
+
+    return {
+      lat,
+      lng,
+      areaLabel: shortAreaLabel(neighborhood, result.formatted_address),
+      currentCity:
+        locality && country
+          ? `${locality}, ${country}`
+          : cityFromAddress(result.formatted_address, neighborhood),
+    };
+  } catch {
+    return nominatimReverse(lat, lng);
   }
 }

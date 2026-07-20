@@ -53,6 +53,7 @@ async function ExploreContent({
     <ExploreMap
       areaLabel={profile.area_label}
       city={profile.current_city}
+      discoverRadiusM={profile.discover_radius_m}
       userLat={profile.approx_lat}
       userLng={profile.approx_lng}
       travelers={travelers}

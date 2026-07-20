@@ -21,6 +21,7 @@ const DiscoverMap = dynamic(
 type ExploreMapProps = {
   areaLabel?: string | null;
   city?: string | null;
+  discoverRadiusM?: number | null;
   userLat?: number | null;
   userLng?: number | null;
   travelers: DiscoverTraveler[];
@@ -31,6 +32,7 @@ type ExploreMapProps = {
 export function ExploreMap({
   areaLabel,
   city,
+  discoverRadiusM,
   userLat,
   userLng,
   travelers,
@@ -45,6 +47,8 @@ export function ExploreMap({
         userLat={userLat}
         userLng={userLng}
         areaLabel={location}
+        city={city}
+        discoverRadiusM={discoverRadiusM}
         travelers={travelers}
         title="Explore"
         focusEventId={focusEventId}

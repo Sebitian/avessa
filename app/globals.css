@@ -257,3 +257,70 @@
   font: inherit;
   background: #e8eef3;
 }
+
+/* Uber-style fixed center pin (map pans underneath) */
+.avessa-uber-pin {
+  position: relative;
+  width: 44px;
+  height: 56px;
+  filter: drop-shadow(0 4px 8px rgba(88, 28, 135, 0.35));
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
+}
+
+.avessa-uber-pin--fixed {
+  /* Tip of the pin sits on the true map center */
+  transform: translateY(-28px);
+}
+
+.avessa-uber-pin--fixed.is-dragging {
+  transform: translateY(-36px) scale(1.08);
+  filter: drop-shadow(0 12px 16px rgba(88, 28, 135, 0.42));
+}
+
+.avessa-uber-pin__head {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  border-radius: 50% 50% 50% 4px;
+  background: linear-gradient(160deg, #8b5cf6 0%, #6d28d9 100%);
+  border: 3px solid #fff;
+  transform: rotate(-45deg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.avessa-uber-pin__dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 999px;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.avessa-uber-pin__shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 16px;
+  height: 6px;
+  margin-left: -8px;
+  border-radius: 999px;
+  background: rgba(24, 24, 27, 0.28);
+  filter: blur(1px);
+  transition:
+    transform 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.avessa-uber-pin--fixed.is-dragging .avessa-uber-pin__shadow {
+  transform: scale(0.65);
+  opacity: 0.4;
+}

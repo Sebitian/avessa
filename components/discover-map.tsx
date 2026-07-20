@@ -1,11 +1,36 @@
 "use client";
 
 import L from "leaflet";
-import { Clock3, LocateFixed, Search, UserRound, MapPin } from "lucide-react";
+import {
+  Clock3,
+  LocateFixed,
+  MapPinned,
+  Search,
+  UserRound,
+  MapPin,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  ExploreLocationPanel,
+  defaultDraftLocation,
+  type DraftLocation,
+} from "@/components/explore-location-panel";
+import {
+  eventsAround,
+  filterEvents,
+  formatEventWhen,
+  type CityEvent,
+} from "@/lib/events";
+import {
+  DEFAULT_DISCOVER_RADIUS_M,
+  clampDiscoverRadiusM,
+  distanceMeters,
+  formatRadiusLabel,
+  zoomForRadiusMeters,
+} from "@/lib/geo";
 import {
   DEFAULT_MAP_CENTER,
   DISCOVER_CATEGORIES,
@@ -15,13 +40,8 @@ import {
   type Place,
   type PlaceCategoryKey,
 } from "@/lib/mock-data";
-import {
-  eventsAround,
-  filterEvents,
-  formatEventWhen,
-  type CityEvent,
-} from "@/lib/events";
 import { presenceLabel, type DiscoverTraveler } from "@/lib/presence";
+import { upsertCurrentProfile } from "@/lib/profile-client";
 import { cn } from "@/lib/utils";
 
 import "leaflet/dist/leaflet.css";
@@ -30,6 +50,8 @@ type DiscoverMapProps = {
   userLat?: number | null;
   userLng?: number | null;
   areaLabel?: string | null;
+  city?: string | null;
+  discoverRadiusM?: number | null;
   travelers?: DiscoverTraveler[];
   title?: string;
   focusEventId?: string | null;
@@ -126,21 +148,12 @@ function personIcon(traveler: DiscoverTraveler) {
   });
 }
 
-function distanceSq(
-  aLat: number,
-  aLng: number,
-  bLat: number,
-  bLng: number,
-) {
-  const dLat = aLat - bLat;
-  const dLng = aLng - bLng;
-  return dLat * dLat + dLng * dLng;
-}
-
 export function DiscoverMap({
   userLat,
   userLng,
   areaLabel,
+  city,
+  discoverRadiusM,
   travelers = [],
   title: _title = "Explore",
   focusEventId = null,
@@ -153,8 +166,16 @@ export function DiscoverMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const overlaysRef = useRef<L.LayerGroup | null>(null);
+  const radiusCircleRef = useRef<L.Circle | null>(null);
   const centerKeyRef = useRef<string | null>(null);
   const focusedEventRef = useRef<string | null>(null);
+  const placingRef = useRef(false);
+  const ignoreMoveEndRef = useRef(false);
+  const placeOnMapRef = useRef<(lat: number, lng: number) => Promise<void>>(
+    async () => {},
+  );
+  const [fitToken, setFitToken] = useState(0);
+  const [mapPanning, setMapPanning] = useState(false);
 
   type FocusTarget = {
     kind: "person" | "place" | "event";
@@ -169,6 +190,39 @@ export function DiscoverMap({
   const [query, setQuery] = useState("");
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const [remotePlaces, setRemotePlaces] = useState<Place[] | null>(null);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<DraftLocation>(() =>
+    defaultDraftLocation({
+      lat: userLat ?? DEFAULT_MAP_CENTER.lat,
+      lng: userLng ?? DEFAULT_MAP_CENTER.lng,
+      areaLabel,
+      city,
+      radiusM: discoverRadiusM,
+    }),
+  );
+
+  const radiusM = clampDiscoverRadiusM(
+    discoverRadiusM ?? DEFAULT_DISCOVER_RADIUS_M,
+  );
+
+  useEffect(() => {
+    if (locationOpen) return;
+    setDraft(
+      defaultDraftLocation({
+        lat: userLat ?? DEFAULT_MAP_CENTER.lat,
+        lng: userLng ?? DEFAULT_MAP_CENTER.lng,
+        areaLabel,
+        city,
+        radiusM: discoverRadiusM,
+      }),
+    );
+  }, [userLat, userLng, areaLabel, city, discoverRadiusM, locationOpen]);
+
+  useEffect(() => {
+    placingRef.current = locationOpen;
+  }, [locationOpen]);
 
   const showingEvents = category === "events";
   const placeCategory: PlaceCategoryKey =
@@ -176,20 +230,117 @@ export function DiscoverMap({
   const needle = query.trim().toLowerCase();
 
   const center = useMemo(() => {
+    if (locationOpen) {
+      return { lat: draft.lat, lng: draft.lng };
+    }
     if (userLat != null && userLng != null) {
       return { lat: userLat, lng: userLng };
     }
     return DEFAULT_MAP_CENTER;
-  }, [userLat, userLng]);
+  }, [userLat, userLng, locationOpen, draft.lat, draft.lng]);
+
+  const activeRadiusM = locationOpen ? draft.radiusM : radiusM;
+
+  async function openLocationPicker() {
+    setLocationError(null);
+    setFocusTarget(null);
+    setDraft(
+      defaultDraftLocation({
+        lat: userLat ?? DEFAULT_MAP_CENTER.lat,
+        lng: userLng ?? DEFAULT_MAP_CENTER.lng,
+        areaLabel,
+        city,
+        radiusM: discoverRadiusM,
+      }),
+    );
+    setFitToken((n) => n + 1);
+    setLocationOpen(true);
+  }
+
+  function updateDraftLocation(next: DraftLocation, opts?: { fit?: boolean }) {
+    if (opts?.fit) {
+      const moved =
+        distanceMeters(draft.lat, draft.lng, next.lat, next.lng) > 25;
+      if (moved) setFitToken((n) => n + 1);
+    }
+    setDraft(next);
+  }
+
+  async function placeOnMap(lat: number, lng: number) {
+    setDraft((prev) => ({
+      ...prev,
+      lat,
+      lng,
+    }));
+    try {
+      const res = await fetch(
+        `/api/places/geocode?lat=${lat}&lng=${lng}`,
+      );
+      if (!res.ok) throw new Error("Could not read that spot");
+      const data = (await res.json()) as {
+        location: {
+          lat: number;
+          lng: number;
+          areaLabel: string;
+          currentCity: string;
+        };
+      };
+      setDraft((prev) => ({
+        ...prev,
+        lat,
+        lng,
+        areaLabel: data.location.areaLabel,
+        currentCity: data.location.currentCity,
+      }));
+    } catch {
+      setDraft((prev) => ({
+        ...prev,
+        lat,
+        lng,
+        areaLabel: "Pinned location",
+      }));
+    }
+  }
+
+  placeOnMapRef.current = placeOnMap;
+
+  async function saveLocation() {
+    setSavingLocation(true);
+    setLocationError(null);
+    setRemotePlaces(null);
+    try {
+      await upsertCurrentProfile({
+        current_city: draft.currentCity,
+        approx_lat: draft.lat,
+        approx_lng: draft.lng,
+        area_label: draft.areaLabel,
+        discover_radius_m: clampDiscoverRadiusM(draft.radiusM),
+      });
+      setLocationOpen(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setLocationError(
+        err instanceof Error ? err.message : "Could not save location",
+      );
+    } finally {
+      setSavingLocation(false);
+    }
+  }
 
   const placesPool = useMemo(() => {
     const around = remotePlaces ?? placesAround(center.lat, center.lng);
-    return [...around].sort(
-      (a, b) =>
-        distanceSq(center.lat, center.lng, a.lat, a.lng) -
-        distanceSq(center.lat, center.lng, b.lat, b.lng),
-    );
-  }, [remotePlaces, center.lat, center.lng]);
+    return [...around]
+      .filter(
+        (p) =>
+          distanceMeters(center.lat, center.lng, p.lat, p.lng) <=
+          activeRadiusM,
+      )
+      .sort(
+        (a, b) =>
+          distanceMeters(center.lat, center.lng, a.lat, a.lng) -
+          distanceMeters(center.lat, center.lng, b.lat, b.lng),
+      );
+  }, [remotePlaces, center.lat, center.lng, activeRadiusM]);
 
   const places = useMemo(() => {
     if (showingEvents) return [];
@@ -218,7 +369,10 @@ export function DiscoverMap({
   }, [placesPool, placeCategory, showingEvents, needle, focusTarget]);
 
   const mapEvents = useMemo(() => {
-    const week = filterEvents(eventsAround(center.lat, center.lng), "week");
+    const week = filterEvents(eventsAround(center.lat, center.lng), "week").filter(
+      (e) =>
+        distanceMeters(center.lat, center.lng, e.lat, e.lng) <= activeRadiusM,
+    );
     const filtered = needle
       ? week.filter((e) => {
           const hay = [e.title, e.venue, e.neighborhood, e.label]
@@ -235,14 +389,28 @@ export function DiscoverMap({
       }
     }
     return list;
-  }, [center.lat, center.lng, needle, focusTarget]);
+  }, [center.lat, center.lng, needle, focusTarget, activeRadiusM]);
 
   const nearbyPeople = useMemo(() => {
     if (!showPeople || showingEvents) return [];
-    const ranked = [...travelers].sort(
+    const inRadius = travelers.filter((t) => {
+      const d = distanceMeters(center.lat, center.lng, t.lat, t.lng);
+      if (d > activeRadiusM) return false;
+      // Respect their visibility radius when set (mutual area).
+      const theirRadius = t.discoverRadiusM;
+      if (
+        theirRadius != null &&
+        Number.isFinite(theirRadius) &&
+        d > theirRadius
+      ) {
+        return false;
+      }
+      return true;
+    });
+    const ranked = [...inRadius].sort(
       (a, b) =>
-        distanceSq(center.lat, center.lng, a.lat, a.lng) -
-        distanceSq(center.lat, center.lng, b.lat, b.lng),
+        distanceMeters(center.lat, center.lng, a.lat, a.lng) -
+        distanceMeters(center.lat, center.lng, b.lat, b.lng),
     );
     const filtered = needle
       ? ranked.filter((t) => {
@@ -259,7 +427,7 @@ export function DiscoverMap({
           return hay.includes(needle);
         })
       : ranked;
-    let list = filtered.slice(0, needle ? 12 : 6);
+    let list = filtered.slice(0, needle ? 12 : 8);
 
     // Keep a search-selected person pinned on the map.
     if (focusTarget?.kind === "person") {
@@ -277,6 +445,7 @@ export function DiscoverMap({
     center.lng,
     needle,
     focusTarget,
+    activeRadiusM,
   ]);
 
   const searchHits = useMemo(() => {
@@ -359,7 +528,7 @@ export function DiscoverMap({
     async function load() {
       try {
         const res = await fetch(
-          `/api/places/nearby?lat=${center.lat}&lng=${center.lng}&category=${placeCategory}`,
+          `/api/places/nearby?lat=${center.lat}&lng=${center.lng}&category=${placeCategory}&radius=${activeRadiusM}`,
           { signal: controller.signal },
         );
         if (!res.ok) return;
@@ -379,7 +548,7 @@ export function DiscoverMap({
       cancelled = true;
       controller.abort();
     };
-  }, [center.lat, center.lng, placeCategory, showingEvents]);
+  }, [center.lat, center.lng, placeCategory, showingEvents, activeRadiusM]);
 
   // Create / destroy the map imperatively — avoids react-leaflet remount bugs.
   useEffect(() => {
@@ -389,7 +558,7 @@ export function DiscoverMap({
     const map = L.map(el, {
       zoomControl: false,
       attributionControl: false,
-    }).setView([center.lat, center.lng], 14);
+    }).setView([center.lat, center.lng], zoomForRadiusMeters(radiusM));
 
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
@@ -422,11 +591,97 @@ export function DiscoverMap({
       }
       mapRef.current = null;
       overlaysRef.current = null;
+      radiusCircleRef.current = null;
       centerKeyRef.current = null;
     };
     // Intentionally mount once; center updates handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Uber-style: fixed center pin + pan the map underneath.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!locationOpen) {
+      if (radiusCircleRef.current) {
+        try {
+          map.removeLayer(radiusCircleRef.current);
+        } catch {
+          /* ignore */
+        }
+        radiusCircleRef.current = null;
+      }
+      setMapPanning(false);
+      return;
+    }
+
+    const centerLatLng = L.latLng(draft.lat, draft.lng);
+    if (!radiusCircleRef.current) {
+      radiusCircleRef.current = L.circle(centerLatLng, {
+        radius: draft.radiusM,
+        color: "#7c3aed",
+        fillColor: "#8b5cf6",
+        fillOpacity: 0.14,
+        weight: 2,
+        opacity: 0.8,
+        interactive: false,
+      }).addTo(map);
+    } else {
+      radiusCircleRef.current.setRadius(draft.radiusM);
+    }
+
+    const onMove = () => {
+      if (!placingRef.current) return;
+      setMapPanning(true);
+      radiusCircleRef.current?.setLatLng(map.getCenter());
+    };
+
+    const onMoveEnd = () => {
+      if (!placingRef.current) return;
+      setMapPanning(false);
+      if (ignoreMoveEndRef.current) {
+        ignoreMoveEndRef.current = false;
+        return;
+      }
+      const c = map.getCenter();
+      void placeOnMapRef.current(c.lat, c.lng);
+    };
+
+    map.on("movestart", onMove);
+    map.on("move", onMove);
+    map.on("moveend", onMoveEnd);
+
+    return () => {
+      map.off("movestart", onMove);
+      map.off("move", onMove);
+      map.off("moveend", onMoveEnd);
+    };
+    // draft.radiusM updates circle size; lat/lng driven by map pan / fitToken
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationOpen, draft.radiusM]);
+
+  // Fly map when opening or after a search pick.
+  useEffect(() => {
+    if (!locationOpen || fitToken === 0) return;
+    const map = mapRef.current;
+    if (!map) return;
+    try {
+      ignoreMoveEndRef.current = true;
+      map.stop();
+      map.setView(
+        [draft.lat, draft.lng],
+        zoomForRadiusMeters(draft.radiusM),
+        { animate: true },
+      );
+      radiusCircleRef.current?.setLatLng([draft.lat, draft.lng]);
+      // Geocode after programmatic move (moveend ignored once).
+      void placeOnMapRef.current(draft.lat, draft.lng);
+    } catch {
+      ignoreMoveEndRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fitToken gates intentional camera moves
+  }, [fitToken, locationOpen]);
 
   // Focus an event deep link from an event profile.
   useEffect(() => {
@@ -463,63 +718,86 @@ export function DiscoverMap({
     if (!map || !overlays) return;
 
     try {
-      map.stop();
+      // Never call map.stop() while the user is panning to place a pin.
+      if (!locationOpen) {
+        map.stop();
+      }
 
       const key = `${center.lat.toFixed(5)},${center.lng.toFixed(5)}`;
-      if (centerKeyRef.current !== key && !focusEventId && !focusTarget) {
+      if (
+        !locationOpen &&
+        centerKeyRef.current !== key &&
+        !focusEventId &&
+        !focusTarget
+      ) {
         centerKeyRef.current = key;
         map.setView([center.lat, center.lng], map.getZoom(), { animate: false });
       }
 
       overlays.clearLayers();
 
-      L.circleMarker([center.lat, center.lng], {
-        radius: 18,
-        color: "#7c3aed",
-        fillColor: "#8b5cf6",
-        fillOpacity: 0.16,
-        weight: 0,
-      }).addTo(overlays);
+      if (!locationOpen) {
+        L.circle([center.lat, center.lng], {
+          radius: activeRadiusM,
+          color: "#7c3aed",
+          fillColor: "#8b5cf6",
+          fillOpacity: 0.08,
+          weight: 1.25,
+          opacity: 0.75,
+          interactive: false,
+        }).addTo(overlays);
 
-      L.circleMarker([center.lat, center.lng], {
-        radius: 7,
-        color: "#fff",
-        fillColor: "#7c3aed",
-        fillOpacity: 1,
-        weight: 3,
-      }).addTo(overlays);
+        L.circleMarker([center.lat, center.lng], {
+          radius: 18,
+          color: "#7c3aed",
+          fillColor: "#8b5cf6",
+          fillOpacity: 0.16,
+          weight: 0,
+        }).addTo(overlays);
 
-      if (showingEvents) {
-        for (const event of mapEvents) {
-          L.marker([event.lat, event.lng], { icon: eventIcon(event) })
-            .on("click", () => {
-              routerRef.current.push(`/events/${event.id}?from=explore`);
-            })
-            .addTo(overlays);
-        }
-      } else {
-        for (const place of places) {
-          L.marker([place.lat, place.lng], {
-            icon: placeIcon(place),
-            zIndexOffset: 80,
-          })
-            .on("click", () => {
-              routerRef.current.push(
-                `/discover/places/${place.id}?from=explore`,
-              );
-            })
-            .addTo(overlays);
-        }
+        L.circleMarker([center.lat, center.lng], {
+          radius: 7,
+          color: "#fff",
+          fillColor: "#7c3aed",
+          fillOpacity: 1,
+          weight: 3,
+        }).addTo(overlays);
+      }
 
-        for (const traveler of nearbyPeople) {
-          L.marker([traveler.lat, traveler.lng], {
-            icon: personIcon(traveler),
-            zIndexOffset: 120,
-          })
-            .on("click", () => {
-              routerRef.current.push(`/discover/${traveler.id}`);
+      // Keep the map clear while adjusting the pin (Uber-style).
+      if (!locationOpen) {
+        if (showingEvents) {
+          for (const event of mapEvents) {
+            L.marker([event.lat, event.lng], { icon: eventIcon(event) })
+              .on("click", () => {
+                routerRef.current.push(`/events/${event.id}?from=explore`);
+              })
+              .addTo(overlays);
+          }
+        } else {
+          for (const place of places) {
+            L.marker([place.lat, place.lng], {
+              icon: placeIcon(place),
+              zIndexOffset: 80,
             })
-            .addTo(overlays);
+              .on("click", () => {
+                routerRef.current.push(
+                  `/discover/places/${place.id}?from=explore`,
+                );
+              })
+              .addTo(overlays);
+          }
+
+          for (const traveler of nearbyPeople) {
+            L.marker([traveler.lat, traveler.lng], {
+              icon: personIcon(traveler),
+              zIndexOffset: 120,
+            })
+              .on("click", () => {
+                routerRef.current.push(`/discover/${traveler.id}`);
+              })
+              .addTo(overlays);
+          }
         }
       }
 
@@ -536,16 +814,22 @@ export function DiscoverMap({
     mapEvents,
     focusEventId,
     focusTarget,
+    activeRadiusM,
+    locationOpen,
   ]);
 
-  /** Recenter on the user’s chosen city — not live GPS. */
+  /** Recenter on the user’s chosen area — not live GPS. */
   function recenterOnCity() {
     setFocusTarget(null);
     const map = mapRef.current;
     if (!map) return;
     try {
       map.stop();
-      map.setView([center.lat, center.lng], 14, { animate: true });
+      map.setView(
+        [center.lat, center.lng],
+        zoomForRadiusMeters(activeRadiusM),
+        { animate: true },
+      );
     } catch {
       /* ignore */
     }
@@ -572,7 +856,27 @@ export function DiscoverMap({
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#e8eef3]">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* Search + recenter on city */}
+      {/* Fixed center pin — drag/pan the map underneath (Uber-style). */}
+      {locationOpen ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[900] flex items-center justify-center"
+          aria-hidden
+        >
+          <div
+            className={cn(
+              "avessa-uber-pin avessa-uber-pin--fixed",
+              mapPanning && "is-dragging",
+            )}
+          >
+            <div className="avessa-uber-pin__head">
+              <span className="avessa-uber-pin__dot" />
+            </div>
+            <div className="avessa-uber-pin__shadow" />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Search + select-location chip + recenter */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] px-3 pt-[max(0.85rem,env(safe-area-inset-top))]">
         <div className="pointer-events-auto flex items-start gap-2">
           <div className="relative min-w-0 flex-1">
@@ -590,7 +894,7 @@ export function DiscoverMap({
               />
             </label>
 
-            {needle ? (
+            {needle && !locationOpen ? (
               <div className="absolute inset-x-0 top-[calc(100%+0.4rem)] max-h-64 overflow-y-auto rounded-xl bg-white/98 shadow-lg ring-1 ring-zinc-200/90 backdrop-blur-sm">
                 {searchHits.length === 0 ? (
                   <p className="px-3.5 py-3 text-sm text-zinc-500">
@@ -635,17 +939,68 @@ export function DiscoverMap({
 
           <button
             type="button"
+            onClick={() => void openLocationPicker()}
+            className={cn(
+              "flex h-11 max-w-[10.5rem] shrink-0 items-center gap-1.5 rounded-xl border border-zinc-200/90 bg-white/95 px-2.5 text-left shadow-md shadow-black/10 backdrop-blur-sm transition hover:bg-white",
+              locationOpen && "ring-2 ring-violet-400/60",
+            )}
+            aria-label="Select location on map"
+            title="Select location on map"
+          >
+            <MapPinned className="h-4 w-4 shrink-0 text-violet-600" />
+            <span className="min-w-0">
+              <span className="block truncate text-[11px] font-semibold leading-tight text-zinc-900">
+                {(locationOpen ? draft.areaLabel : areaLabel) ||
+                  city ||
+                  "Location"}
+              </span>
+              <span className="block truncate text-[10px] leading-tight text-zinc-500">
+                {formatRadiusLabel(activeRadiusM)}
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={recenterOnCity}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/95 text-zinc-800 shadow-md shadow-black/10 ring-1 ring-black/5 backdrop-blur-sm transition hover:bg-white"
-            aria-label="Center map on my city"
-            title="Center on my city"
+            aria-label="Center map on my area"
+            title="Center on my area"
           >
             <LocateFixed className="h-[18px] w-[18px]" />
           </button>
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] bg-gradient-to-t from-white via-white/80 to-transparent px-3 pb-3 pt-16">
+      <ExploreLocationPanel
+        open={locationOpen}
+        onClose={() => {
+          setLocationOpen(false);
+          setLocationError(null);
+        }}
+        draft={draft}
+        onDraftChange={(next) => updateDraftLocation(next, { fit: true })}
+        biasLat={center.lat}
+        biasLng={center.lng}
+        saving={savingLocation}
+        error={locationError}
+        onSave={() => void saveLocation()}
+      />
+
+      {locationOpen ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[42%] z-[901] flex justify-center">
+          <span className="rounded-full bg-zinc-900/80 px-3 py-1 text-[11px] font-medium text-white shadow-md backdrop-blur-sm">
+            Drag the map to move the pin
+          </span>
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-[1000] bg-gradient-to-t from-white via-white/80 to-transparent px-3 pb-3 pt-16",
+          locationOpen && "hidden",
+        )}
+      >
         <div className="pointer-events-auto space-y-2.5">
           <div className="flex gap-2 px-0.5">
             {!showingEvents ? (
@@ -668,7 +1023,7 @@ export function DiscoverMap({
             </span>
             {areaLabel ? (
               <span className="inline-flex items-center rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-zinc-500 shadow-sm ring-1 ring-zinc-200/70">
-                {areaLabel}
+                {areaLabel} · {formatRadiusLabel(radiusM)}
               </span>
             ) : null}
           </div>

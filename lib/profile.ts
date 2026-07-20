@@ -40,6 +40,7 @@ export type Profile = {
   approx_lat: number | null;
   approx_lng: number | null;
   area_label: string | null;
+  discover_radius_m: number | null;
   onboarding_complete: boolean | null;
 };
 
@@ -48,7 +49,7 @@ export type ProfileUpdate = Partial<
 >;
 
 const DISCOVER_SELECT =
-  "id, first_name, age, nationality, current_city, home_city, area_label, approx_lat, approx_lng, avatar_url, interests, bio, traveler_status, languages, looking_for, gender";
+  "id, first_name, age, nationality, current_city, home_city, area_label, approx_lat, approx_lng, discover_radius_m, avatar_url, interests, bio, traveler_status, languages, looking_for, gender";
 
 function toDiscoverTraveler(row: Profile): DiscoverTraveler | null {
   if (row.approx_lat == null || row.approx_lng == null) return null;
@@ -71,6 +72,7 @@ function toDiscoverTraveler(row: Profile): DiscoverTraveler | null {
     lastSeen: online ? null : demoLastSeenFromId(row.id),
     lat: row.approx_lat,
     lng: row.approx_lng,
+    discoverRadiusM: row.discover_radius_m ?? undefined,
   };
 }
 

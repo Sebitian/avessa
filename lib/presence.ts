@@ -19,6 +19,8 @@ export type DiscoverTraveler = {
   lastSeen: string | null;
   lat: number;
   lng: number;
+  /** Optional visibility radius (meters) around their pin. */
+  discoverRadiusM?: number;
 };
 
 function hashId(id: string, salt = 0): number {

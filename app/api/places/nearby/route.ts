@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { clampDiscoverRadiusM } from "@/lib/geo";
 import { fetchNearbyPlaces } from "@/lib/google-places";
 import type { PlaceCategoryKey } from "@/lib/mock-data";
 
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
   const lng = Number(searchParams.get("lng"));
   const categoryParam = (searchParams.get("category") ||
     "top") as PlaceCategoryKey;
+  const radiusParam = Number(searchParams.get("radius"));
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json(
@@ -28,7 +30,15 @@ export async function GET(request: Request) {
   }
 
   const category = CATEGORIES.has(categoryParam) ? categoryParam : "top";
-  const { places, source } = await fetchNearbyPlaces({ lat, lng, category });
+  const radiusMeters = Number.isFinite(radiusParam)
+    ? clampDiscoverRadiusM(radiusParam)
+    : undefined;
+  const { places, source } = await fetchNearbyPlaces({
+    lat,
+    lng,
+    category,
+    radiusMeters,
+  });
 
   return NextResponse.json({ places, source });
 }
