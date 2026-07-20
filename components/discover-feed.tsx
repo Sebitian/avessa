@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronDown, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import {
   CITY_EVENTS,
@@ -18,6 +19,9 @@ import {
   type PlaceCategoryKey,
 } from "@/lib/mock-data";
 import { presenceLabel, type DiscoverTraveler } from "@/lib/presence";
+import { upsertCurrentProfile } from "@/lib/profile-client";
+import { CITIES, coordsForCity } from "@/lib/profile-options";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type DiscoverFeedProps = {
@@ -25,6 +29,8 @@ type DiscoverFeedProps = {
   city?: string | null;
   travelers: DiscoverTraveler[];
 };
+
+const CITY_OPTIONS = CITIES.filter((c) => c !== "Other");
 
 function avatarFor(traveler: DiscoverTraveler) {
   return (
@@ -43,28 +49,105 @@ function parseCategory(value: string | null): DiscoverCategoryKey {
   return "top";
 }
 
+function shortCityLabel(city: string) {
+  return city.split(",")[0]?.trim() || city;
+}
+
 export function DiscoverFeed({
   areaLabel,
   city,
   travelers,
 }: DiscoverFeedProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [category, setCategory] = useState<DiscoverCategoryKey>(() =>
     parseCategory(searchParams.get("category")),
   );
+  const [query, setQuery] = useState("");
+  const [selectedCity, setSelectedCity] = useState(() => {
+    if (city && CITY_OPTIONS.includes(city as (typeof CITY_OPTIONS)[number])) {
+      return city;
+    }
+    return "Barcelona, Spain";
+  });
+  const [savingCity, setSavingCity] = useState(false);
+  const [cityError, setCityError] = useState<string | null>(null);
 
   const location = areaLabel || city || "Near you";
+  const needle = query.trim().toLowerCase();
+
+  async function changeCity(nextCity: string) {
+    if (nextCity === selectedCity) return;
+    setSelectedCity(nextCity);
+    setSavingCity(true);
+    setCityError(null);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      const placed = coordsForCity(nextCity, user.id);
+      if (!placed) throw new Error("Pick a city from the list");
+
+      await upsertCurrentProfile({
+        current_city: placed.city,
+        approx_lat: placed.lat,
+        approx_lng: placed.lng,
+        area_label: placed.area,
+      });
+      router.refresh();
+    } catch (err: unknown) {
+      setCityError(err instanceof Error ? err.message : "Could not change city");
+      if (city) setSelectedCity(city);
+    } finally {
+      setSavingCity(false);
+    }
+  }
+
+  const filteredTravelers = useMemo(() => {
+    if (!needle) return travelers;
+    return travelers.filter((t) => {
+      const hay = [
+        t.firstName,
+        t.nationality,
+        t.area,
+        t.city,
+        ...(t.interests ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [travelers, needle]);
 
   const places = useMemo(() => {
     if (category === "events") return [];
-    if (category === "top") return PLACES;
-    return PLACES.filter((p) => p.categoryKey === (category as PlaceCategoryKey));
-  }, [category]);
+    const base =
+      category === "top"
+        ? PLACES
+        : PLACES.filter((p) => p.categoryKey === (category as PlaceCategoryKey));
+    if (!needle) return base;
+    return base.filter((p) => {
+      const hay = [p.name, p.tagline, p.neighborhood, placeCategoryLabel(p)]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [category, needle]);
 
   const events = useMemo(() => {
     if (category !== "events" && category !== "top") return [];
-    return CITY_EVENTS;
-  }, [category]);
+    if (!needle) return CITY_EVENTS;
+    return CITY_EVENTS.filter((e) => {
+      const hay = [e.title, e.venue, e.neighborhood, e.label]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [category, needle]);
 
   const showingEvents = category === "events";
 
@@ -73,6 +156,46 @@ export function DiscoverFeed({
       <header className="safe-top px-5 pb-3">
         <h1 className="text-2xl font-bold tracking-tight">Discover</h1>
         <p className="mt-1 text-sm text-muted-foreground">{location}</p>
+
+        <div className="mt-3 flex items-center gap-2">
+          <label className="relative min-w-0 flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search people, places…"
+              className="h-11 w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-3 text-sm text-zinc-900 shadow-sm outline-none placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-300"
+            />
+          </label>
+
+          <label className="relative shrink-0">
+            <span className="sr-only">Change city</span>
+            <select
+              value={selectedCity}
+              disabled={savingCity}
+              onChange={(e) => void changeCity(e.target.value)}
+              className="h-11 max-w-[9.5rem] appearance-none rounded-xl border border-zinc-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-zinc-900 shadow-sm outline-none focus:border-zinc-400 focus:ring-1 focus:ring-zinc-300 disabled:opacity-60"
+              aria-label="Change city"
+            >
+              {CITY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {shortCityLabel(option)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+              aria-hidden
+            />
+          </label>
+        </div>
+        {cityError ? (
+          <p className="mt-2 text-xs text-destructive">{cityError}</p>
+        ) : null}
       </header>
 
       <div className="scrollbar-hide flex gap-2 overflow-x-auto px-5 pb-4">
@@ -104,14 +227,14 @@ export function DiscoverFeed({
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold">Nearby Travelers</h2>
             <span className="text-xs text-muted-foreground">
-              {travelers.length > 0
-                ? `${travelers.length} around you`
+              {filteredTravelers.length > 0
+                ? `${filteredTravelers.length} around you`
                 : "Nobody nearby yet"}
             </span>
           </div>
-          {travelers.length > 0 ? (
+          {filteredTravelers.length > 0 ? (
             <div className="scrollbar-hide -mx-5 flex gap-3 overflow-x-auto px-5">
-              {travelers.map((traveler) => (
+              {filteredTravelers.map((traveler) => (
                 <Link
                   key={traveler.id}
                   href={`/discover/${traveler.id}`}

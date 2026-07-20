@@ -173,34 +173,21 @@ export function TravelerProfile({ traveler }: TravelerProfileProps) {
           </div>
         </div>
 
-        {/* Social-style profile body */}
+        {/* Social-style profile body (name already on photo) */}
         <div className="flex flex-col gap-5 px-4 pb-28 pt-5">
-          <div className="flex items-start gap-3.5">
-            <div className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-full bg-zinc-100 ring-2 ring-white shadow-md">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={traveler.photo}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <h2 className="truncate text-2xl font-bold tracking-tight text-zinc-900">
-                {traveler.firstName}
-              </h2>
-              <p className="text-sm text-zinc-500">{handle}</p>
-              <p className="mt-1.5 text-[13px] text-zinc-600">
-                <span className="font-semibold text-zinc-900">
-                  {stats.following}
-                </span>{" "}
-                following
-                <span className="mx-1.5 text-zinc-300">·</span>
-                <span className="font-semibold text-zinc-900">
-                  {stats.followers}
-                </span>{" "}
-                followers
-              </p>
-            </div>
+          <div>
+            <p className="text-sm text-zinc-500">{handle}</p>
+            <p className="mt-1 text-[13px] text-zinc-600">
+              <span className="font-semibold text-zinc-900">
+                {stats.following}
+              </span>{" "}
+              following
+              <span className="mx-1.5 text-zinc-300">·</span>
+              <span className="font-semibold text-zinc-900">
+                {stats.followers}
+              </span>{" "}
+              followers
+            </p>
           </div>
 
           <div className="flex gap-2 overflow-x-auto">

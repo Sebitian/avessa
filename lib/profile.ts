@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { NEARBY_TRAVELERS } from "@/lib/mock-data";
 import {
   demoLastSeenFromId,
   demoOnlineFromId,
@@ -7,6 +8,20 @@ import {
 
 export type { DiscoverTraveler } from "@/lib/presence";
 export { presenceLabel, demoLastSeenFromId } from "@/lib/presence";
+
+/** Prefer portrait crop when the avatar is an Unsplash URL. */
+function portraitPhotoUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes("images.unsplash.com")) return url;
+    parsed.searchParams.set("w", "800");
+    parsed.searchParams.set("h", "1000");
+    parsed.searchParams.set("fit", "crop");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 export type Profile = {
   id: string;
@@ -134,49 +149,52 @@ export async function getDiscoverTravelerById(
   return toDiscoverTraveler(data as Profile);
 }
 
-const EXTRA_PROFILE_PHOTOS = [
-  "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&h=1000&fit=crop",
-  "https://images.unsplash.com/photo-1539635278303-d4002c07eae3?w=800&h=1000&fit=crop",
-  "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&h=1000&fit=crop",
-  "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&h=1000&fit=crop",
-  "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=800&h=1000&fit=crop",
-  "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&h=1000&fit=crop",
-];
-
 /** Shape used by the TravelerProfile UI (mock + live profiles). */
 export function discoverTravelerToCard(traveler: DiscoverTraveler) {
-  const photo =
-    traveler.avatarUrl ||
-    `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(traveler.id)}`;
-
-  // Give live profiles a short Tinder-style stack when they only have an avatar.
-  let hash = 0;
-  for (let i = 0; i < traveler.id.length; i++) {
-    hash = (hash * 31 + traveler.id.charCodeAt(i)) >>> 0;
-  }
-  const extraA = EXTRA_PROFILE_PHOTOS[hash % EXTRA_PROFILE_PHOTOS.length];
-  const extraB =
-    EXTRA_PROFILE_PHOTOS[(hash + 2) % EXTRA_PROFILE_PHOTOS.length];
-  const photos = [photo, extraA, extraB].filter(
-    (src, i, arr) => arr.indexOf(src) === i,
+  // Seeded demo accounts share first names with curated mock cards — reuse their
+  // portrait stacks / prompts so prod doesn't look like random stock photos.
+  const mockTwin = NEARBY_TRAVELERS.find(
+    (t) => t.firstName.toLowerCase() === traveler.firstName.toLowerCase(),
   );
+
+  const rawPhoto =
+    traveler.avatarUrl ||
+    mockTwin?.photo ||
+    `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(traveler.id)}`;
+  const photo = portraitPhotoUrl(rawPhoto);
+
+  const photos =
+    mockTwin?.photos?.length && mockTwin.photos.length > 1
+      ? mockTwin.photos
+      : [photo];
 
   return {
     id: traveler.id,
     firstName: traveler.firstName,
-    nationality: traveler.nationality || "",
-    flag: "",
+    nationality: traveler.nationality || mockTwin?.nationality || "",
+    flag: mockTwin?.flag || "",
     area: traveler.area,
-    sharedInterests: traveler.interests,
-    age: traveler.age ?? undefined,
-    bio: traveler.bio || "Say hi and make a plan.",
+    sharedInterests:
+      traveler.interests.length > 0
+        ? traveler.interests
+        : (mockTwin?.sharedInterests ?? []),
+    age: traveler.age ?? mockTwin?.age,
+    bio: traveler.bio || mockTwin?.bio || "Say hi and make a plan.",
     photo,
     photos,
-    languages: traveler.languages,
-    lookingFor: traveler.lookingFor,
-    travelerStatus: traveler.travelerStatus || "Nearby",
+    languages:
+      traveler.languages.length > 0
+        ? traveler.languages
+        : (mockTwin?.languages ?? []),
+    lookingFor:
+      traveler.lookingFor.length > 0
+        ? traveler.lookingFor
+        : (mockTwin?.lookingFor ?? []),
+    travelerStatus:
+      traveler.travelerStatus || mockTwin?.travelerStatus || "Nearby",
     online: traveler.online,
     lastSeen: traveler.lastSeen,
+    prompts: mockTwin?.prompts,
   };
 }
 

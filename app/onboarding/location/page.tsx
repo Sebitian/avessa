@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { LocationPermission } from "@/components/location-permission";
 import { OnboardingFallback } from "@/components/onboarding-fallback";
-import { getSessionUser } from "@/lib/profile";
+import { getCurrentProfile, getSessionUser } from "@/lib/profile";
 
 export default function LocationPage() {
   return (
@@ -19,5 +19,14 @@ async function LocationContent() {
     redirect("/auth/login");
   }
 
-  return <LocationPermission />;
+  const profile = await getCurrentProfile();
+
+  return (
+    <LocationPermission
+      initialCity={profile?.current_city}
+      afterSaveHref={
+        profile?.onboarding_complete ? "/profile" : "/discover"
+      }
+    />
+  );
 }

@@ -148,21 +148,26 @@ export function ProfileView({ profile, email }: ProfileViewProps) {
         </section>
       )}
 
-      {(profile.area_label ||
-        profile.approx_lat != null ||
-        profile.approx_lng != null) && (
-        <section className="px-5 pb-8">
-          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
+      <section className="px-5 pb-8">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-muted-foreground">
             Location
           </h2>
-          <p className="text-sm">
-            {profile.area_label || "Location shared"}
-            {profile.approx_lat != null && profile.approx_lng != null
-              ? ` · ${profile.approx_lat.toFixed(3)}, ${profile.approx_lng.toFixed(3)}`
-              : null}
-          </p>
-        </section>
-      )}
+          <Link
+            href="/onboarding/location"
+            className="text-sm font-medium text-primary"
+          >
+            Change city
+          </Link>
+        </div>
+        <p className="text-sm">
+          {profile.current_city || "No city set"}
+          {profile.area_label ? ` · ${profile.area_label}` : null}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          City pick sets your Discover area — not live GPS.
+        </p>
+      </section>
     </div>
   );
 }

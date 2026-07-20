@@ -1,7 +1,7 @@
 "use client";
 
 import L from "leaflet";
-import { Clock3, LocateFixed } from "lucide-react";
+import { Clock3, LocateFixed, Search, UserRound, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import {
   DEFAULT_MAP_CENTER,
   DISCOVER_CATEGORIES,
   placesAround,
+  placeCategoryLabel,
   type DiscoverCategoryKey,
   type Place,
   type PlaceCategoryKey,
@@ -155,60 +156,199 @@ export function DiscoverMap({
   const centerKeyRef = useRef<string | null>(null);
   const focusedEventRef = useRef<string | null>(null);
 
+  type FocusTarget = {
+    kind: "person" | "place" | "event";
+    id: string;
+    lat: number;
+    lng: number;
+  };
+
   const [category, setCategory] =
     useState<DiscoverCategoryKey>(initialCategory);
   const [showPeople, setShowPeople] = useState(true);
-  const [liveCoords, setLiveCoords] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(null);
+  const [query, setQuery] = useState("");
+  const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const [remotePlaces, setRemotePlaces] = useState<Place[] | null>(null);
 
   const showingEvents = category === "events";
   const placeCategory: PlaceCategoryKey =
     category === "events" ? "top" : category;
+  const needle = query.trim().toLowerCase();
 
   const center = useMemo(() => {
-    if (liveCoords) return liveCoords;
     if (userLat != null && userLng != null) {
       return { lat: userLat, lng: userLng };
     }
     return DEFAULT_MAP_CENTER;
-  }, [liveCoords, userLat, userLng]);
+  }, [userLat, userLng]);
 
-  const localPlaces = useMemo(() => {
-    if (showingEvents) return [];
-    const around = placesAround(center.lat, center.lng);
-    if (placeCategory === "top") return around;
-    return around.filter((p) => p.categoryKey === placeCategory);
-  }, [center.lat, center.lng, placeCategory, showingEvents]);
-
-  const places = useMemo(() => {
-    const source = remotePlaces ?? localPlaces;
-    const ranked = [...source].sort(
+  const placesPool = useMemo(() => {
+    const around = remotePlaces ?? placesAround(center.lat, center.lng);
+    return [...around].sort(
       (a, b) =>
         distanceSq(center.lat, center.lng, a.lat, a.lng) -
         distanceSq(center.lat, center.lng, b.lat, b.lng),
     );
-    return ranked.slice(0, placeCategory === "top" ? 8 : 10);
-  }, [remotePlaces, localPlaces, center.lat, center.lng, placeCategory]);
+  }, [remotePlaces, center.lat, center.lng]);
 
-  const mapEvents = useMemo(
-    () =>
-      filterEvents(eventsAround(center.lat, center.lng), "week").slice(0, 6),
-    [center.lat, center.lng],
-  );
+  const places = useMemo(() => {
+    if (showingEvents) return [];
+    const byCategory =
+      placeCategory === "top"
+        ? placesPool
+        : placesPool.filter((p) => p.categoryKey === placeCategory);
+    const ranked = needle
+      ? byCategory.filter((p) => {
+          const hay = [p.name, p.tagline, p.neighborhood, placeCategoryLabel(p)]
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(needle);
+        })
+      : byCategory;
+    let list = ranked.slice(0, placeCategory === "top" ? 8 : 10);
+
+    // Keep a search-selected place pinned on the map.
+    if (focusTarget?.kind === "place") {
+      const pinned = placesPool.find((p) => p.id === focusTarget.id);
+      if (pinned && !list.some((p) => p.id === pinned.id)) {
+        list = [pinned, ...list].slice(0, 12);
+      }
+    }
+    return list;
+  }, [placesPool, placeCategory, showingEvents, needle, focusTarget]);
+
+  const mapEvents = useMemo(() => {
+    const week = filterEvents(eventsAround(center.lat, center.lng), "week");
+    const filtered = needle
+      ? week.filter((e) => {
+          const hay = [e.title, e.venue, e.neighborhood, e.label]
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(needle);
+        })
+      : week;
+    let list = filtered.slice(0, 6);
+    if (focusTarget?.kind === "event") {
+      const pinned = week.find((e) => e.id === focusTarget.id);
+      if (pinned && !list.some((e) => e.id === pinned.id)) {
+        list = [pinned, ...list].slice(0, 8);
+      }
+    }
+    return list;
+  }, [center.lat, center.lng, needle, focusTarget]);
 
   const nearbyPeople = useMemo(() => {
     if (!showPeople || showingEvents) return [];
-    return [...travelers]
-      .sort(
-        (a, b) =>
-          distanceSq(center.lat, center.lng, a.lat, a.lng) -
-          distanceSq(center.lat, center.lng, b.lat, b.lng),
-      )
-      .slice(0, 6);
-  }, [travelers, showPeople, showingEvents, center.lat, center.lng]);
+    const ranked = [...travelers].sort(
+      (a, b) =>
+        distanceSq(center.lat, center.lng, a.lat, a.lng) -
+        distanceSq(center.lat, center.lng, b.lat, b.lng),
+    );
+    const filtered = needle
+      ? ranked.filter((t) => {
+          const hay = [
+            t.firstName,
+            t.nationality,
+            t.area,
+            t.city,
+            ...(t.interests ?? []),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(needle);
+        })
+      : ranked;
+    let list = filtered.slice(0, needle ? 12 : 6);
+
+    // Keep a search-selected person pinned on the map.
+    if (focusTarget?.kind === "person") {
+      const pinned = travelers.find((t) => t.id === focusTarget.id);
+      if (pinned && !list.some((t) => t.id === pinned.id)) {
+        list = [pinned, ...list].slice(0, 12);
+      }
+    }
+    return list;
+  }, [
+    travelers,
+    showPeople,
+    showingEvents,
+    center.lat,
+    center.lng,
+    needle,
+    focusTarget,
+  ]);
+
+  const searchHits = useMemo(() => {
+    if (!needle) return [] as Array<
+      | { kind: "person"; id: string; label: string; meta: string; lat: number; lng: number; href: string }
+      | { kind: "place"; id: string; label: string; meta: string; lat: number; lng: number; href: string }
+      | { kind: "event"; id: string; label: string; meta: string; lat: number; lng: number; href: string }
+    >;
+
+    const peopleHits = travelers
+      .filter((t) => {
+        const hay = [
+          t.firstName,
+          t.nationality,
+          t.area,
+          t.city,
+          ...(t.interests ?? []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(needle);
+      })
+      .slice(0, 5)
+      .map((t) => ({
+        kind: "person" as const,
+        id: t.id,
+        label: t.firstName,
+        meta: presenceLabel(t) || t.area,
+        lat: t.lat,
+        lng: t.lng,
+        href: `/discover/${t.id}`,
+      }));
+
+    const placeHits = placesPool
+      .filter((p) => {
+        const hay = [p.name, p.tagline, p.neighborhood, placeCategoryLabel(p)]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(needle);
+      })
+      .slice(0, 5)
+      .map((p) => ({
+        kind: "place" as const,
+        id: p.id,
+        label: p.name,
+        meta: placeCategoryLabel(p),
+        lat: p.lat,
+        lng: p.lng,
+        href: `/discover/places/${p.id}?from=explore`,
+      }));
+
+    const eventHits = filterEvents(eventsAround(center.lat, center.lng), "week")
+      .filter((e) => {
+        const hay = [e.title, e.venue, e.neighborhood, e.label]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(needle);
+      })
+      .slice(0, 3)
+      .map((e) => ({
+        kind: "event" as const,
+        id: e.id,
+        label: e.title,
+        meta: e.label,
+        lat: e.lat,
+        lng: e.lng,
+        href: `/events/${e.id}?from=explore`,
+      }));
+
+    return [...peopleHits, ...placeHits, ...eventHits];
+  }, [needle, travelers, placesPool, center.lat, center.lng]);
 
   // Fetch Google Places when key is configured (API falls back to mock).
   useEffect(() => {
@@ -273,7 +413,13 @@ export function DiscoverMap({
     return () => {
       window.cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
-      map.remove();
+      try {
+        map.stop();
+        map.off();
+        map.remove();
+      } catch {
+        /* map already torn down */
+      }
       mapRef.current = null;
       overlaysRef.current = null;
       centerKeyRef.current = null;
@@ -282,25 +428,6 @@ export function DiscoverMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Geolocation fallback when profile has no coords.
-  useEffect(() => {
-    if (userLat != null && userLng != null) return;
-    if (!navigator.geolocation) return;
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLiveCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-      },
-      () => {
-        /* keep default center */
-      },
-      { enableHighAccuracy: false, timeout: 8000 },
-    );
-  }, [userLat, userLng]);
-
   // Focus an event deep link from an event profile.
   useEffect(() => {
     if (!focusEventId || focusedEventRef.current === focusEventId) return;
@@ -308,8 +435,26 @@ export function DiscoverMap({
     if (!event) return;
     focusedEventRef.current = focusEventId;
     setCategory("events");
-    mapRef.current?.setView([event.lat, event.lng], 16, { animate: true });
+    setFocusTarget({
+      kind: "event",
+      id: event.id,
+      lat: event.lat,
+      lng: event.lng,
+    });
   }, [focusEventId, mapEvents]);
+
+  // Fly to a search / deep-link target without navigating away.
+  useEffect(() => {
+    if (!focusTarget) return;
+    const map = mapRef.current;
+    if (!map) return;
+    try {
+      map.stop();
+      map.setView([focusTarget.lat, focusTarget.lng], 16, { animate: true });
+    } catch {
+      /* ignore mid-teardown */
+    }
+  }, [focusTarget]);
 
   // Sync center + overlays when data changes.
   useEffect(() => {
@@ -317,63 +462,71 @@ export function DiscoverMap({
     const overlays = overlaysRef.current;
     if (!map || !overlays) return;
 
-    const key = `${center.lat.toFixed(5)},${center.lng.toFixed(5)}`;
-    if (centerKeyRef.current !== key && !focusEventId) {
-      centerKeyRef.current = key;
-      map.setView([center.lat, center.lng], map.getZoom(), { animate: false });
+    try {
+      map.stop();
+
+      const key = `${center.lat.toFixed(5)},${center.lng.toFixed(5)}`;
+      if (centerKeyRef.current !== key && !focusEventId && !focusTarget) {
+        centerKeyRef.current = key;
+        map.setView([center.lat, center.lng], map.getZoom(), { animate: false });
+      }
+
+      overlays.clearLayers();
+
+      L.circleMarker([center.lat, center.lng], {
+        radius: 18,
+        color: "#7c3aed",
+        fillColor: "#8b5cf6",
+        fillOpacity: 0.16,
+        weight: 0,
+      }).addTo(overlays);
+
+      L.circleMarker([center.lat, center.lng], {
+        radius: 7,
+        color: "#fff",
+        fillColor: "#7c3aed",
+        fillOpacity: 1,
+        weight: 3,
+      }).addTo(overlays);
+
+      if (showingEvents) {
+        for (const event of mapEvents) {
+          L.marker([event.lat, event.lng], { icon: eventIcon(event) })
+            .on("click", () => {
+              routerRef.current.push(`/events/${event.id}?from=explore`);
+            })
+            .addTo(overlays);
+        }
+      } else {
+        for (const place of places) {
+          L.marker([place.lat, place.lng], {
+            icon: placeIcon(place),
+            zIndexOffset: 80,
+          })
+            .on("click", () => {
+              routerRef.current.push(
+                `/discover/places/${place.id}?from=explore`,
+              );
+            })
+            .addTo(overlays);
+        }
+
+        for (const traveler of nearbyPeople) {
+          L.marker([traveler.lat, traveler.lng], {
+            icon: personIcon(traveler),
+            zIndexOffset: 120,
+          })
+            .on("click", () => {
+              routerRef.current.push(`/discover/${traveler.id}`);
+            })
+            .addTo(overlays);
+        }
+      }
+
+      map.invalidateSize({ animate: false });
+    } catch {
+      /* Leaflet can throw _leaflet_pos if mid-unmount */
     }
-
-    overlays.clearLayers();
-
-    L.circleMarker([center.lat, center.lng], {
-      radius: 18,
-      color: "#7c3aed",
-      fillColor: "#8b5cf6",
-      fillOpacity: 0.16,
-      weight: 0,
-    }).addTo(overlays);
-
-    L.circleMarker([center.lat, center.lng], {
-      radius: 7,
-      color: "#fff",
-      fillColor: "#7c3aed",
-      fillOpacity: 1,
-      weight: 3,
-    }).addTo(overlays);
-
-    if (showingEvents) {
-      for (const event of mapEvents) {
-        L.marker([event.lat, event.lng], { icon: eventIcon(event) })
-          .on("click", () => {
-            routerRef.current.push(`/events/${event.id}?from=explore`);
-          })
-          .addTo(overlays);
-      }
-    } else {
-      for (const place of places) {
-        L.marker([place.lat, place.lng], {
-          icon: placeIcon(place),
-          zIndexOffset: 80,
-        })
-          .on("click", () => {
-            routerRef.current.push(`/discover/places/${place.id}?from=explore`);
-          })
-          .addTo(overlays);
-      }
-
-      for (const traveler of nearbyPeople) {
-        L.marker([traveler.lat, traveler.lng], {
-          icon: personIcon(traveler),
-          zIndexOffset: 120,
-        })
-          .on("click", () => {
-            routerRef.current.push(`/discover/${traveler.id}`);
-          })
-          .addTo(overlays);
-      }
-    }
-
-    map.invalidateSize({ animate: false });
   }, [
     center.lat,
     center.lng,
@@ -382,40 +535,114 @@ export function DiscoverMap({
     showingEvents,
     mapEvents,
     focusEventId,
+    focusTarget,
   ]);
 
-  function recenter() {
-    const fly = (lat: number, lng: number) => {
-      setLiveCoords({ lat, lng });
-      mapRef.current?.setView([lat, lng], 14, { animate: true });
-    };
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => fly(pos.coords.latitude, pos.coords.longitude),
-        () => fly(center.lat, center.lng),
-        { enableHighAccuracy: false, timeout: 8000 },
-      );
-      return;
+  /** Recenter on the user’s chosen city — not live GPS. */
+  function recenterOnCity() {
+    setFocusTarget(null);
+    const map = mapRef.current;
+    if (!map) return;
+    try {
+      map.stop();
+      map.setView([center.lat, center.lng], 14, { animate: true });
+    } catch {
+      /* ignore */
     }
+  }
 
-    fly(center.lat, center.lng);
+  /** Search picks pin on the map first — bubble click opens the profile. */
+  function focusHit(hit: (typeof searchHits)[number]) {
+    if (hit.kind === "event") {
+      setCategory("events");
+    } else {
+      if (showingEvents) setCategory("top");
+      if (hit.kind === "person") setShowPeople(true);
+    }
+    setFocusTarget({
+      kind: hit.kind,
+      id: hit.id,
+      lat: hit.lat,
+      lng: hit.lng,
+    });
+    setQuery("");
   }
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#e8eef3]">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* Quiet top chrome — locate only, like Figma */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex items-start justify-end px-4 pt-[max(0.85rem,env(safe-area-inset-top))]">
-        <button
-          type="button"
-          onClick={recenter}
-          className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-zinc-800 shadow-md shadow-black/10 ring-1 ring-black/5 backdrop-blur-sm transition hover:bg-white"
-          aria-label="Center on my location"
-        >
-          <LocateFixed className="h-[18px] w-[18px]" />
-        </button>
+      {/* Search + recenter on city */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] px-3 pt-[max(0.85rem,env(safe-area-inset-top))]">
+        <div className="pointer-events-auto flex items-start gap-2">
+          <div className="relative min-w-0 flex-1">
+            <label className="relative block">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search people or places…"
+                className="h-11 w-full rounded-xl border border-zinc-200/90 bg-white/95 pl-9 pr-3 text-sm text-zinc-900 shadow-md shadow-black/10 outline-none backdrop-blur-sm placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-300"
+              />
+            </label>
+
+            {needle ? (
+              <div className="absolute inset-x-0 top-[calc(100%+0.4rem)] max-h-64 overflow-y-auto rounded-xl bg-white/98 shadow-lg ring-1 ring-zinc-200/90 backdrop-blur-sm">
+                {searchHits.length === 0 ? (
+                  <p className="px-3.5 py-3 text-sm text-zinc-500">
+                    No people or places match “{query.trim()}”
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-zinc-100 py-1">
+                    {searchHits.map((hit) => (
+                      <li key={`${hit.kind}-${hit.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => focusHit(hit)}
+                          className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition hover:bg-zinc-50"
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-600">
+                            {hit.kind === "person" ? (
+                              <UserRound className="h-4 w-4" aria-hidden />
+                            ) : (
+                              <MapPin className="h-4 w-4" aria-hidden />
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-zinc-900">
+                              {hit.label}
+                            </span>
+                            <span className="block truncate text-xs text-zinc-500">
+                              {hit.kind === "person"
+                                ? `Person · ${hit.meta}`
+                                : hit.kind === "event"
+                                  ? `Event · ${hit.meta}`
+                                  : `Place · ${hit.meta}`}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={recenterOnCity}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/95 text-zinc-800 shadow-md shadow-black/10 ring-1 ring-black/5 backdrop-blur-sm transition hover:bg-white"
+            aria-label="Center map on my city"
+            title="Center on my city"
+          >
+            <LocateFixed className="h-[18px] w-[18px]" />
+          </button>
+        </div>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] bg-gradient-to-t from-white via-white/80 to-transparent px-3 pb-3 pt-16">
